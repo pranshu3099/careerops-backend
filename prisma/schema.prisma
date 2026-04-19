@@ -1,0 +1,236 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  name          String?
+  passwordHash  String?
+  oauthId       String?       @unique
+  avatar        String?
+  isUserVerified  Boolean  @default(false)
+  provider      AuthProvider @default(LOCAL)
+
+  applications  JobApplication[]
+  events        EventLog[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  AnalyticsSnapshot AnalyticsSnapshot[]
+  refreshTokens     RefreshToken[]
+  emailVerificationTokens EmailVerificationToken[]
+
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  GITHUB
+}
+
+
+model Company {
+  id            String   @id @default(uuid())
+  name          String
+  website       String?
+  linkedinUrl   String?
+
+  applications  JobApplication[]
+
+  createdAt     DateTime @default(now())
+}
+
+
+model JobApplication {
+  id              String   @id @default(uuid())
+
+  userId          String
+  companyId       String
+
+  role            String
+  location        String?
+  salaryRange     String?
+  source          ApplicationSource
+  status          ApplicationStatus
+
+  appliedAt       DateTime
+  lastResponseAt  DateTime?
+  ghostedAt       DateTime?
+
+  followUps       FollowUp[]
+  interviews      Interview[]
+  events          EventLog[]
+  ghostDetection  GhostDetection?
+
+  user            User     @relation(fields: [userId], references: [id])
+  company         Company  @relation(fields: [companyId], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+enum ApplicationStatus {
+  APPLIED
+  SHORTLISTED
+  INTERVIEWING
+  OFFERED
+  REJECTED
+  GHOSTED
+}
+
+enum ApplicationSource {
+  LINKEDIN
+  NAUKRI
+  REFERRAL
+  CAREER_PAGE
+  OTHER
+}
+
+
+model FollowUp {
+  id               String   @id @default(uuid())
+  applicationId    String
+
+  scheduledAt      DateTime
+  executedAt       DateTime?
+  status           FollowUpStatus
+
+  application      JobApplication @relation(fields: [applicationId], references: [id])
+
+  createdAt        DateTime @default(now())
+
+  @@index([scheduledAt])
+}
+
+enum FollowUpStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model Interview {
+  id              String   @id @default(uuid())
+  applicationId   String
+
+  round           String
+  interviewer     String?
+  scheduledAt     DateTime
+  feedback        String?
+  result          InterviewResult?
+
+  application     JobApplication @relation(fields: [applicationId], references: [id])
+
+  createdAt       DateTime @default(now())
+}
+
+enum InterviewResult {
+  PASSED
+  FAILED
+  PENDING
+}
+
+model GhostDetection {
+  id              String   @id @default(uuid())
+  applicationId   String   @unique
+
+  lastCheckedAt   DateTime
+  confidenceScore Float
+  isGhosted       Boolean @default(false)
+
+  application     JobApplication @relation(fields: [applicationId], references: [id])
+
+  createdAt       DateTime @default(now())
+}
+
+model EventLog {
+  id              String   @id @default(uuid())
+
+  userId          String
+  applicationId   String?
+
+  type            EventType
+  payload         Json
+
+  user            User @relation(fields: [userId], references: [id])
+  application     JobApplication? @relation(fields: [applicationId], references: [id])
+
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([applicationId])
+}
+
+
+enum EventType {
+  APPLICATION_CREATED
+  STATUS_UPDATED
+  FOLLOW_UP_SENT
+  INTERVIEW_SCHEDULED
+  GHOST_DETECTED
+}
+
+model AnalyticsSnapshot {
+  id              String   @id @default(uuid())
+  userId          String
+
+  totalApplied    Int
+  totalInterviews Int
+  totalOffers     Int
+  totalGhosted    Int
+
+  snapshotDate    DateTime
+
+  user            User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, snapshotDate])
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  token      String   @unique
+  userId     String
+  expiresAt  DateTime
+  revoked    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model EmailVerificationToken {
+  id         String   @id @default(uuid())
+  token      String   @unique
+  userId     String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+
+
+
+
+
+

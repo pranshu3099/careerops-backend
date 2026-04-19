@@ -1,0 +1,38 @@
+{
+  "name": "careerops",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "worker:email": "node src/workers/email.worker.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.2",
+    "@sendgrid/mail": "^8.1.6",
+    "bcrypt": "^6.0.0",
+    "bullmq": "^5.66.5",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "express-session": "^1.18.2",
+    "ioredis": "^5.9.2",
+    "jsonwebtoken": "^9.0.3",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^7.0.12",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "prisma": "^6.19.2",
+    "winston": "^3.19.0",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.2",
+    "nodemon": "^3.1.11"
+  }
+}
