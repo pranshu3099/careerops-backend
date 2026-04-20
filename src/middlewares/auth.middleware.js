@@ -3,7 +3,6 @@ import { HTTP_STATUS } from "../constants/httpStatus.js";
 
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
-
   if (!authHeader?.startsWith("Bearer ")) {
     return res.status(HTTP_STATUS.UNAUTHORIZED).json({
       message: "Unauthorized",
