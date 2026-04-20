@@ -1,4 +1,4 @@
-export default function mapSource(platform) {
+export function mapSource(platform) {
   switch (platform?.toLowerCase()) {
     case "linkedin":
       return "LINKEDIN";
@@ -13,7 +13,7 @@ export default function mapSource(platform) {
   }
 }
 
-export default function isValidTransition(oldStatus, newStatus) {
+export function isValidTransition(oldStatus, newStatus) {
   const allowed = {
     APPLIED: ["SHORTLISTED", "REJECTED"],
     SHORTLISTED: ["INTERVIEWING"],
