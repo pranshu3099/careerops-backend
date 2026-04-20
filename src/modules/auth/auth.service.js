@@ -3,7 +3,7 @@ import { generateToken, hashToken } from "../../utils/jwt.utils.js";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { AUTH_MESSAGES, COMMON_MESSAGES } from "../../constants/messages.js";
-import { sendVerificationEmail } from "../../utils/mailer.js";
+import { sendVerificationEmail } from "../../utils/verificationmailer.js";
 
 const prisma = new PrismaClient();
 
