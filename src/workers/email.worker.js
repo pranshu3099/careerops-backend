@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { Worker } from "bullmq";
 import redisConnection from "../config/redis.js";
-import { sendVerificationEmail } from "../utils/mailer.js";
+import { sendVerificationEmail } from "../utils/verificationmailer.js";
 
 export const emailWorker = new Worker(
     "email-queue",
