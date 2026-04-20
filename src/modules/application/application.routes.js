@@ -1,9 +1,21 @@
 import { Router } from "express";
+
 import { ApplicationController } from "./application.controller.js";
 import authenticate from "../../middlewares/auth.middleware.js";
-const router = Router()
+import validateRequest from "../../middlewares/validateRequest.js";
+import { createApplicationSchema } from "../../validators/application.schema.js";
+const router = Router();
 
-router.post('/applications', authenticate ,ApplicationController.createApplicationHandler)
-router.patch('/applications/:id/status', authenticate,  ApplicationController.updateStatusHandler)
+router.post(
+  "/create",
+  authenticate,
+  validateRequest(createApplicationSchema),
+  ApplicationController.createApplicationHandler,
+);
+router.patch(
+  "/:id/status",
+  authenticate,
+  ApplicationController.updateStatusHandler,
+);
 
-export default router
+export default router;
