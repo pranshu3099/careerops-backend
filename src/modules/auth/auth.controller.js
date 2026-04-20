@@ -3,7 +3,7 @@ import { HTTP_STATUS } from "../../constants/httpStatus.js";
 import { AUTH_MESSAGES, COMMON_MESSAGES } from "../../constants/messages.js";
 import { PrismaClient } from "@prisma/client";
 import { generateRefreshToken, hashToken } from "../../utils/jwt.utils.js";
-import EmailService from "../../services/email.service.js";
+import EmailVerificationService from "../../services/emailverification.service.js";
 const prisma = new PrismaClient();
 export class AuthController {
   static googleCallback(req, res) {
@@ -33,7 +33,7 @@ export class AuthController {
         });
       }
 
-      await EmailService.sendVerificationEmailJob(user);
+      await EmailVerificationService.sendVerificationEmailJob(user);
 
       return res.status(HTTP_STATUS.CREATED).json({
         success: true,
