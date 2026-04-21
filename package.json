@@ -10,7 +10,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "worker:email": "node src/workers/email.worker.js",
-    "worker:followup": "node src/workers/followup.worker.js"
+    "worker:followup": "node src/workers/followup.worker.js",
+    "worker:ghost": "node src/workers/ghost.worker.js"
 
   },
   "dependencies": {
