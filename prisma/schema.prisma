@@ -153,12 +153,15 @@ model GhostDetection {
   applicationId   String   @unique
 
   lastCheckedAt   DateTime
+  nextCheckAt     DateTime
   confidenceScore Float
   isGhosted       Boolean @default(false)
 
   application     JobApplication @relation(fields: [applicationId], references: [id])
 
   createdAt       DateTime @default(now())
+
+  @@index([nextCheckAt])
 }
 
 model EventLog {
