@@ -1,7 +1,8 @@
 import { ApplicationService } from "./application.service.js";
 import { HTTP_STATUS } from "../../constants/httpStatus.js";
-import FollowUpEmailService from "../../services/followupemail.service.js";
 import { getUser } from "../../utils/helper.js";
+import FollowUpEmailScheduler from "../../scheduler/followupemail.scheduler.js";
+import { ghostQueue } from "../../queues/ghost.queue.js";
 
 export class ApplicationController {
   static async createApplicationHandler(req, res) {
@@ -15,12 +16,10 @@ export class ApplicationController {
         });
       }
 
-      const { application, followUpId } = await ApplicationService.createApplication(
-        userId,
-        req.body,
-      );
+      const { application, followUpId } =
+        await ApplicationService.createApplication(userId, req.body);
 
-      await FollowUpEmailService.sendFollowupEmailJob(
+      await FollowUpEmailScheduler.sendFollowupEmailJob(
         followUpId,
         hrEmail,
         role,
@@ -29,6 +28,32 @@ export class ApplicationController {
         hrName,
         user?.name,
         user?.email,
+      );
+
+      await ghostQueue.add(
+        "check-ghost",
+        {
+          applicationId: application.id,
+          followUpId,
+          hrEmail,
+          role,
+          company,
+          appliedDate,
+          hrName,
+          userName: user?.name,
+          userEmail: user?.email,
+        },
+        {
+          delay: 1000,
+          //delay: 7 * 24 * 60 * 60 * 1000, first check after 7 days
+          jobId: application.id,
+          removeOnComplete: true,
+          attempts: 3,
+          backoff: {
+            type: "exponential",
+            delay: 5000,
+          },
+        },
       );
       return res.status(HTTP_STATUS.CREATED).json({
         success: true,
@@ -68,6 +93,15 @@ export class ApplicationController {
         userId,
         id,
         status,
+      );
+
+      await ghostQueue.add(
+        "check-ghost",
+        { applicationId: updated?.id },
+        {
+          delay: 3 * 24 * 60 * 60 * 1000,
+          jobId: updated?.id,
+        },
       );
 
       return res.json({
