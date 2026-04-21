@@ -4,7 +4,7 @@ import { Worker } from "bullmq";
 import redisConnection from "../config/redis.js";
 import { sendFollowUpEmail } from "../utils/followupmailer.js";
 const prisma = new PrismaClient();
-export const emailWorker = new Worker(
+export const followupWorker = new Worker(
   "followup-queue",
   async (job) => {
     const {
@@ -45,8 +45,12 @@ export const emailWorker = new Worker(
         return;
       }
 
+      const app = followUp.application;
+      if (app.lastResponseAt) return;
+      if (["REJECTED", "OFFERED", "INTERVIEWING"].includes(app.status)) return;
+
       // check if still relevant
-      if (followUp.application.status !== "APPLIED") {
+      if (app.status !== "APPLIED") {
         await prisma.followUp.update({
           where: { id: followUpId },
           data: { status: "CANCELLED" },
@@ -94,12 +98,12 @@ export const emailWorker = new Worker(
   },
 );
 
-emailWorker.on("completed", (job) => {
-  console.log(`Email job with ID ${job.id} has been completed.`);
+followupWorker.on("completed", (job) => {
+  console.log(`Followup job with ID ${job.id} has been completed.`);
 });
 
-emailWorker.on("failed", (job, err) => {
+followupWorker.on("failed", (job, err) => {
   console.error(
-    `Email job with ID ${job.id} has failed. Error: ${err.message}`,
+    `Followup job with ID ${job.id} has failed. Error: ${err.message}`,
   );
 });
