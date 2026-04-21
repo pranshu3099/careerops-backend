@@ -106,7 +106,6 @@ export class ApplicationService {
       data: updateData,
     });
 
-    // 📜 event log
     await prisma.eventLog.create({
       data: {
         userId,
