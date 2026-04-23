@@ -4,6 +4,8 @@ import { getUser } from "../../utils/helper.js";
 import FollowUpEmailScheduler from "../../scheduler/followupemail.scheduler.js";
 import { ghostQueue } from "../../queues/ghost.queue.js";
 
+const getAuthUserId = (req) => req?.user?.userId || req?.user?.id;
+
 export class ApplicationController {
   static async createApplicationHandler(req, res) {
     try {
@@ -113,6 +115,97 @@ export class ApplicationController {
         success: false,
         message: err.message,
       });
+    }
+  }
+
+  static async getApplications(req, res) {
+    try {
+      const userId = getAuthUserId(req);
+      console.log(userId, "userId");
+      const data = await ApplicationService.getApplications(userId);
+      return res.status(HTTP_STATUS.OK).json(data);
+    } catch (e) {
+      return res
+        .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
+        .json({ message: e.message });
+    }
+  }
+
+  static async getApplicationById(req, res) {
+    try {
+      const userId = getAuthUserId(req);
+      const data = await ApplicationService.getApplicationById(
+        req.params.id,
+        userId,
+      );
+      return res.status(HTTP_STATUS.OK).json(data);
+    } catch (e) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ message: e.message });
+    }
+  }
+
+  static async updateApplication(req, res) {
+    try {
+      const userId = getAuthUserId(req);
+      const data = await ApplicationService.updateApplication(
+        req.params.id,
+        userId,
+        req.body,
+      );
+      return res.status(HTTP_STATUS.OK).json(data);
+    } catch (e) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ message: e.message });
+    }
+  }
+
+  static async deleteApplication(req, res) {
+    try {
+      const userId = getAuthUserId(req);
+      const data = await ApplicationService.deleteApplication(
+        req.params.id,
+        userId,
+      );
+      return res.status(HTTP_STATUS.OK).json(data);
+    } catch (e) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ message: e.message });
+    }
+  }
+
+  static async getFollowUps(req, res) {
+    try {
+      const userId = getAuthUserId(req);
+      const data = await ApplicationService.getUserFollowUps(
+        req.params.id,
+        userId,
+      );
+      return res.status(HTTP_STATUS.OK).json(data);
+    } catch (e) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ message: e.message });
+    }
+  }
+
+  static async getGhost(req, res) {
+    try {
+      const userId = getAuthUserId(req);
+      const data = await ApplicationService.getGhostApplication(
+        req.params.id,
+        userId,
+      );
+      return res.status(HTTP_STATUS.OK).json(data);
+    } catch (e) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ message: e.message });
+    }
+  }
+
+  static async getStats(req, res) {
+    try {
+      const userId = getAuthUserId(req);
+      const data = await ApplicationService.getApplicationStats(userId);
+      return res.status(HTTP_STATUS.OK).json(data);
+    } catch (e) {
+      res
+        .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
+        .json({ message: e.message });
     }
   }
 }
