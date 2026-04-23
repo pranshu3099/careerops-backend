@@ -36,8 +36,13 @@ export class AuthService {
   }
 
   static generateAuthToken(user) {
+    const userId = user?.id || user?.userId;
+    if (!userId) {
+      throw new Error("User ID is required to generate auth token");
+    }
+
     return generateToken({
-      userId: user.id,
+      userId,
       email: user.email,
     });
   }
@@ -135,7 +140,6 @@ export class AuthService {
           email,
         },
       });
-      console.log(existingUser, "existingUser");
       if (!existingUser || !existingUser.passwordHash) {
         throw new Error(AUTH_MESSAGES.INVALID_CREDENTIALS);
       }
