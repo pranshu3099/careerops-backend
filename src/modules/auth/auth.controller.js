@@ -147,7 +147,7 @@ export class AuthController {
     }
   }
 
-  static async refresh() {
+  static async refresh(req, res) {
     const token = req.cookies.refreshToken;
     if (!token) {
       return res
@@ -186,6 +186,16 @@ export class AuthController {
       },
     });
 
+    const user = await prisma.user.findUnique({
+      where: { id: storedToken.userId },
+    });
+
+    if (!user) {
+      return res
+        .status(HTTP_STATUS.UNAUTHORIZED)
+        .json({ message: "Unauthorized" });
+    }
+
     const accessToken = AuthService.generateAuthToken(user);
     res.cookie("refreshToken", newRefreshToken, {
       httpOnly: true,
@@ -207,7 +217,9 @@ export class AuthController {
       });
     }
     res.clearCookie("refreshToken");
-    return res.status(HTTP_STATUS.OK).json({ message: "Logged out successfully", success: true, });
+    return res
+      .status(HTTP_STATUS.OK)
+      .json({ message: "Logged out successfully", success: true });
   }
 
   static async me(req, res) {
