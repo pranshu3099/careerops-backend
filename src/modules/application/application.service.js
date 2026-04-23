@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { mapSource, isValidTransition } from "../../utils/application.js";
+import { findAllByUser, findById, getFollowUps, getGhost, getStats, softDelete, updateById } from "./application.repo.js";
 const prisma = new PrismaClient();
 export class ApplicationService {
   static async createApplication(userId, data) {
@@ -119,5 +120,69 @@ export class ApplicationService {
     });
 
     return updated;
+  }
+
+  static async getApplications(userId) {
+    const apps = await findAllByUser(userId);
+
+    return apps.map((a) => ({
+      id: a.id,
+      company: a.company?.name || null,
+      role: a.role,
+      platform: a.source,
+      appliedAt: a.appliedAt,
+      currentStatus: a.status,
+      lastResponseAt: a.lastResponseAt || null,
+      ghostDetection: a.ghostDetection
+        ? {
+            isGhosted: a.ghostDetection.isGhosted,
+            confidenceScore: a.ghostDetection.confidenceScore,
+          }
+        : null,
+      latestFollowUp: a.followUps[0] || null,
+    }));
+  }
+
+  static async getApplicationById(id, userId) {
+    const app = await findById(id, userId);
+    if (!app) throw new Error("Not found");
+
+    return app;
+  }
+
+  static async updateApplication(id, userId, data) {
+    const allowed = [
+      "role",
+      "location",
+      "platform",
+      "hrEmail",
+      "appliedDate",
+      "notes",
+    ];
+
+    const updateData = {};
+    allowed.forEach((key) => {
+      if (data[key] !== undefined) updateData[key] = data[key];
+    });
+
+    await updateById(id, userId, updateData);
+    return { success: true };
+  }
+
+  static async deleteApplication(id, userId) {
+    await softDelete(id, userId);
+    return { success: true };
+  }
+
+  static async getUserFollowUps(id, userId) {
+    return getFollowUps(id, userId);
+  }
+
+  static async getGhostApplication(id, userId) {
+    return getGhost(id, userId);
+  }
+
+  static async getApplicationStats(userId) {
+    return getStats(userId);
   }
 }
