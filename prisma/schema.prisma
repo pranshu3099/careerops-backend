@@ -61,7 +61,7 @@ model JobApplication {
 
   userId          String
   companyId       String
-
+  isDeleted       Boolean @default(false)
   role            String
   location        String?
   salaryRange     String?
