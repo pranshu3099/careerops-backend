@@ -38,6 +38,7 @@ router.post(
 
 router.post("/login", validateRequest(loginSchema), AuthController.login);
 router.post("/logout", AuthController.logout);
+router.post("/auth/refresh", AuthController.refresh);
 router.get("/verify-email", AuthController.verifyEmail);
 router.get("/me", AuthController.me);
 export default router;
