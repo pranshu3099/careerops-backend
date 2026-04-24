@@ -45,8 +45,15 @@ export class ApplicationService {
             },
           },
         },
-        include: {
+        select: {
+          id: true,
+          status: true,
+          appliedAt: true,
           followUps: {
+            select: {
+              id: true,
+              scheduledAt: true,
+            },
             orderBy: { createdAt: "desc" },
             take: 1,
           },
@@ -73,8 +80,11 @@ export class ApplicationService {
     });
 
     return {
-      application,
+      applicationId: application.id,
+      status: application.status,
+      appliedAt: application.appliedAt,
       followUpId: followUp.id,
+      nextFollowUpAt: followUp.scheduledAt,
     };
   }
 
