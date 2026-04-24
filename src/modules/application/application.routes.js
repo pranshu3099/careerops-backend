@@ -7,7 +7,7 @@ import { createApplicationSchema } from "../../validators/application.schema.js"
 const router = Router();
 
 router.post(
-  "/",
+  "/create",
   authenticate,
   validateRequest(createApplicationSchema),
   ApplicationController.createApplicationHandler,
