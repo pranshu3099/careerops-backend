@@ -18,7 +18,7 @@ export class ApplicationController {
         });
       }
 
-      const { application, followUpId } =
+      const { applicationId, status, appliedAt, followUpId, nextFollowUpAt } =
         await ApplicationService.createApplication(userId, req.body);
 
       await FollowUpEmailScheduler.sendFollowupEmailJob(
@@ -35,7 +35,7 @@ export class ApplicationController {
       await ghostQueue.add(
         "check-ghost",
         {
-          applicationId: application.id,
+          applicationId,
           followUpId,
           hrEmail,
           role,
@@ -48,7 +48,7 @@ export class ApplicationController {
         {
           delay: 1000,
           //delay: 7 * 24 * 60 * 60 * 1000, first check after 7 days
-          jobId: application.id,
+          jobId: applicationId,
           removeOnComplete: true,
           attempts: 3,
           backoff: {
@@ -60,8 +60,11 @@ export class ApplicationController {
       return res.status(HTTP_STATUS.CREATED).json({
         success: true,
         data: {
-          application,
+          applicationId,
+          status,
+          appliedAt,
           followUpId,
+          nextFollowUpAt,
         },
       });
     } catch (err) {
