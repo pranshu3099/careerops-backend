@@ -16,6 +16,7 @@ export const followupWorker = new Worker(
       hrName,
       userName,
       userEmail,
+      followupmessage,
     } = job.data;
 
     if (job.name !== "send-followup-reminder") {
