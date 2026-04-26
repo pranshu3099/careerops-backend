@@ -3,12 +3,28 @@ const prisma = new PrismaClient();
 
 export const findAllByUser = (userId) => {
   return prisma.jobApplication.findMany({
-    where: { userId, isDeleted: false },
+    where: {
+      userId,
+      isDeleted: false,
+      followUps: {
+        some: {
+          executedAt: null,
+          status: "PENDING",
+        },
+      },
+    },
     orderBy: { createdAt: "desc" },
     include: {
       company: true,
       ghostDetection: true,
       followUps: {
+        where: {
+          executedAt: null,
+          status: "PENDING",
+        },
+        select: {
+          scheduledAt: true,
+        },
         orderBy: { scheduledAt: "desc" },
         take: 1,
       },
@@ -16,17 +32,17 @@ export const findAllByUser = (userId) => {
   });
 };
 
+
 export const findById = (id, userId) => {
   return prisma.jobApplication.findFirst({
     where: { id, userId, isDeleted: false },
     include: {
-      company:true,
+      company: true,
       ghostDetection: true,
       followUps: { orderBy: { scheduledAt: "desc" } },
     },
   });
 };
-
 
 export const updateById = (id, userId, data) => {
   return prisma.jobApplication.updateMany({
@@ -51,7 +67,6 @@ export const getFollowUps = (applicationId, userId) => {
     orderBy: { scheduledAt: "desc" },
   });
 };
-
 
 export const getGhost = (applicationId, userId) => {
   return prisma.ghostDetection.findFirst({
@@ -86,5 +101,3 @@ export const getStats = async (userId) => {
 
   return stats;
 };
-
-
