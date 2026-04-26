@@ -112,7 +112,7 @@ model FollowUp {
   scheduledAt      DateTime
   executedAt       DateTime?
   status           FollowUpStatus
-
+  type             FollowUpType?
   application      JobApplication @relation(fields: [applicationId], references: [id])
 
   createdAt        DateTime @default(now())
@@ -125,6 +125,12 @@ enum FollowUpStatus {
   SENT
   FAILED
   CANCELLED
+}
+
+enum FollowUpType {
+  APPLICATION_CHECK
+  INTERVIEW_REQUEST
+  INTERVIEW_FEEDBACK
 }
 
 model Interview {
