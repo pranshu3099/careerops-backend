@@ -233,6 +233,7 @@ export class AuthController {
         data: {
           id: user.id,
           email: user.email,
+          name:user.name,
           isUserVerified: user.isUserVerified,
         },
       });
