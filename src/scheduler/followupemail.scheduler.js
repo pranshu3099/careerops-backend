@@ -1,4 +1,18 @@
 import { followupQueue } from "../queues/followup.queue.js";
+import { FOLLOWUPTYPE, getFollowUpMessage } from "../constants/followup.js";
+
+const ApplicationCheckMessageAfter3days = getFollowUpMessage(
+  FOLLOWUPTYPE.APPLICATION_CHECK,
+  3,
+);
+const ApplicationCheckMessageAfter7days = getFollowUpMessage(
+  FOLLOWUPTYPE.APPLICATION_CHECK,
+  7,
+);
+const ApplicationCheckMessageAfter14days = getFollowUpMessage(
+  FOLLOWUPTYPE.APPLICATION_CHECK,
+  14,
+);
 class FollowUpEmailScheduler {
   static async sendFollowupEmailJob(
     followUpId,
@@ -26,9 +40,10 @@ class FollowUpEmailScheduler {
           hrName,
           userName,
           userEmail,
+          followupmessage: ApplicationCheckMessageAfter3days,
         },
         {
-          delay: 5000,
+          delay: 3 * 24 * 60 * 60 * 1000,
           attempts: 3,
           backoff: {
             type: "exponential",
@@ -50,6 +65,7 @@ class FollowUpEmailScheduler {
           hrName,
           userName,
           userEmail,
+          message: ApplicationCheckMessageAfter7days
         },
         {
           delay: 7 * 24 * 60 * 60 * 1000,
@@ -74,6 +90,7 @@ class FollowUpEmailScheduler {
           hrName,
           userName,
           userEmail,
+          message: ApplicationCheckMessageAfter14days
         },
         {
           delay: 14 * 24 * 60 * 60 * 1000,
