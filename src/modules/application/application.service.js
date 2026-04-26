@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { mapSource, isValidTransition } from "../../utils/application.js";
 import { findAllByUser, findById, getFollowUps, getGhost, getStats, softDelete, updateById } from "./application.repo.js";
+import { FOLLOWUPTYPE } from "../../constants/followup.js";
 const prisma = new PrismaClient();
 export class ApplicationService {
   static async createApplication(userId, data) {
@@ -42,6 +43,7 @@ export class ApplicationService {
             create: {
               scheduledAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
               status: "PENDING",
+              type:FOLLOWUPTYPE.APPLICATION_CHECK
             },
           },
         },
