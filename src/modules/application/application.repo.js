@@ -6,28 +6,11 @@ export const findAllByUser = (userId) => {
     where: {
       userId,
       isDeleted: false,
-      followUps: {
-        some: {
-          executedAt: null,
-          status: "PENDING",
-        },
-      },
     },
     orderBy: { createdAt: "desc" },
     include: {
       company: true,
       ghostDetection: true,
-      followUps: {
-        where: {
-          executedAt: null,
-          status: "PENDING",
-        },
-        select: {
-          scheduledAt: true,
-        },
-        orderBy: { scheduledAt: "desc" },
-        take: 1,
-      },
     },
   });
 };
