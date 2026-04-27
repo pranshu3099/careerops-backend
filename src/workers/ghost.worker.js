@@ -53,6 +53,7 @@ export const ghostWorker = new Worker(
         },
         {
           delay: 5000,
+          jobId: `followup:${followUpId}`,
           attempts: 3,
           backoff: {
             type: "exponential",
