@@ -112,12 +112,14 @@ model FollowUp {
   scheduledAt      DateTime
   executedAt       DateTime?
   status           FollowUpStatus
-  type             FollowUpType?
+  type             FollowUpType @default(APPLICATION_CHECK)
+  sequence         Int?
   application      JobApplication @relation(fields: [applicationId], references: [id])
 
   createdAt        DateTime @default(now())
 
   @@index([scheduledAt])
+  @@index([applicationId, type, sequence])
 }
 
 enum FollowUpStatus {
@@ -129,8 +131,10 @@ enum FollowUpStatus {
 
 enum FollowUpType {
   APPLICATION_CHECK
-  INTERVIEW_REQUEST
+  SHORTLISTED_CHECKIN
   INTERVIEW_FEEDBACK
+  OFFER_FOLLOWUP
+  GENERAL_STATUS_CHECK
 }
 
 model Interview {
@@ -237,10 +241,5 @@ model EmailVerificationToken {
 
   @@index([userId])
 }
-
-
-
-
-
 
 
