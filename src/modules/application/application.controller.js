@@ -18,18 +18,25 @@ export class ApplicationController {
         });
       }
 
-      const { applicationId, status, appliedAt, followUpId, nextFollowUpAt } =
+      const { applicationId, status, appliedAt, followUpId, nextFollowUpAt, followUps } =
         await ApplicationService.createApplication(userId, req.body);
 
-      await FollowUpEmailScheduler.sendFollowupEmailJob(
-        followUpId,
-        hrEmail,
-        role,
-        company,
-        appliedDate,
-        hrName,
-        user?.name,
-        user?.email,
+      await Promise.all(
+        followUps.map((followUp) =>
+          FollowUpEmailScheduler.scheduleFollowUpJob({
+            followUpId: followUp.id,
+            type: followUp.type,
+            sequence: followUp.sequence,
+            hrEmail,
+            role,
+            company,
+            appliedDate,
+            hrName,
+            userName: user?.name,
+            userEmail: user?.email,
+            delayMs: Math.max(followUp.scheduledAt.getTime() - Date.now(), 0),
+          }),
+        ),
       );
 
       await ghostQueue.add(
@@ -46,8 +53,8 @@ export class ApplicationController {
           userEmail: user?.email,
         },
         {
-          delay: 1000,
-          //delay: 7 * 24 * 60 * 60 * 1000, first check after 7 days
+          // delay: 1000,
+          delay: 7 * 24 * 60 * 60 * 1000, 
           jobId: applicationId,
           removeOnComplete: true,
           attempts: 3,
@@ -65,6 +72,7 @@ export class ApplicationController {
           appliedAt,
           followUpId,
           nextFollowUpAt,
+          followUps,
         },
       });
     } catch (err) {
@@ -124,7 +132,6 @@ export class ApplicationController {
   static async getApplications(req, res) {
     try {
       const userId = getAuthUserId(req);
-      console.log(userId, "userId");
       const data = await ApplicationService.getApplications(userId);
       return res.status(HTTP_STATUS.OK).json(data);
     } catch (e) {
