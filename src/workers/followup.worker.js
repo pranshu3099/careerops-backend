@@ -3,12 +3,37 @@ import { PrismaClient } from "@prisma/client";
 import { Worker } from "bullmq";
 import redisConnection from "../config/redis.js";
 import { sendFollowUpEmail } from "../utils/followupmailer.js";
+import { FOLLOWUPTYPE } from "../constants/followup.js";
 const prisma = new PrismaClient();
+
+const hasInterviewResult = (interviews = []) =>
+  interviews.some((interview) => interview.result && interview.result !== "PENDING");
+
+const isFollowUpStillValid = (followUp) => {
+  const app = followUp.application;
+
+  switch (followUp.type) {
+    case FOLLOWUPTYPE.SHORTLISTED_CHECKIN:
+      return app.status === "SHORTLISTED";
+    case FOLLOWUPTYPE.INTERVIEW_FEEDBACK:
+      return app.status === "INTERVIEWING" && !hasInterviewResult(app.interviews);
+    case FOLLOWUPTYPE.OFFER_FOLLOWUP:
+      return app.status === "OFFERED";
+    case FOLLOWUPTYPE.GENERAL_STATUS_CHECK:
+      return !["REJECTED", "GHOSTED"].includes(app.status);
+    case FOLLOWUPTYPE.APPLICATION_CHECK:
+    default:
+      return app.status === "APPLIED" && !app.lastResponseAt;
+  }
+};
+
 export const followupWorker = new Worker(
   "followup-queue",
   async (job) => {
     const {
       followUpId,
+      type: jobType,
+      sequence: jobSequence,
       to,
       role,
       company,
@@ -16,7 +41,6 @@ export const followupWorker = new Worker(
       hrName,
       userName,
       userEmail,
-      followupmessage,
     } = job.data;
 
     if (job.name !== "send-followup-reminder") {
@@ -31,7 +55,17 @@ export const followupWorker = new Worker(
     try {
       const followUp = await prisma.followUp.findUnique({
         where: { id: followUpId },
-        include: { application: true },
+        include: {
+          application: {
+            include: {
+              interviews: {
+                select: {
+                  result: true,
+                },
+              },
+            },
+          },
+        },
       });
 
       if (!followUp) {
@@ -46,12 +80,21 @@ export const followupWorker = new Worker(
         return;
       }
 
-      const app = followUp.application;
-      if (app.lastResponseAt) return;
-      if (["REJECTED", "OFFERED", "INTERVIEWING"].includes(app.status)) return;
+      const typedFollowUp = {
+        ...followUp,
+        type: followUp.type || jobType || FOLLOWUPTYPE.APPLICATION_CHECK,
+        sequence: followUp.sequence || jobSequence || 1,
+      };
 
-      // check if still relevant
-      if (app.status !== "APPLIED") {
+      if (
+        typedFollowUp.type === FOLLOWUPTYPE.APPLICATION_CHECK &&
+        typedFollowUp.application.status === "APPLIED" &&
+        typedFollowUp.application.lastResponseAt
+      ) {
+        return;
+      }
+
+      if (!isFollowUpStillValid(typedFollowUp)) {
         await prisma.followUp.update({
           where: { id: followUpId },
           data: { status: "CANCELLED" },
@@ -62,6 +105,8 @@ export const followupWorker = new Worker(
       // send email
       await sendFollowUpEmail({
         followUpId,
+        type: typedFollowUp.type,
+        sequence: typedFollowUp.sequence,
         to,
         role,
         company,
