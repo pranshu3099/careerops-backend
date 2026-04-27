@@ -1,11 +1,27 @@
 import { PrismaClient } from "@prisma/client";
 import { mapSource, isValidTransition } from "../../utils/application.js";
 import { findAllByUser, findById, getFollowUps, getGhost, getStats, softDelete, updateById } from "./application.repo.js";
-import { FOLLOWUPTYPE } from "../../constants/followup.js";
+import {
+  FOLLOWUPTYPE,
+  FOLLOWUP_SCHEDULE_DAYS,
+  FOLLOWUP_TYPE_BY_STATUS,
+  getFollowUpDelayMs,
+  getFollowUpMessage,
+} from "../../constants/followup.js";
+import FollowUpEmailScheduler from "../../scheduler/followupemail.scheduler.js";
 const prisma = new PrismaClient();
+
+const withFollowUpMessage = (followUp) =>
+  followUp
+    ? {
+        ...followUp,
+        message: getFollowUpMessage(followUp.type, followUp.sequence),
+      }
+    : null;
+
 export class ApplicationService {
   static async createApplication(userId, data) {
-    const { company, role, location, platform, appliedDate, hrEmail } = data;
+    const { company, role, location, platform, appliedDate, hrEmail, hrName } = data;
 
     let companyRecord = await prisma.company.findFirst({
       where: { name: company },
@@ -13,7 +29,7 @@ export class ApplicationService {
 
     if (!companyRecord) {
       companyRecord = await prisma.company.create({
-        data: { name: company, hrEmail },
+        data: { name: company, hrEmail, hrName },
       });
     }
 
@@ -29,7 +45,16 @@ export class ApplicationService {
       throw new Error("Application already exists");
     }
 
-    const { application, followUp } = await prisma.$transaction(async (tx) => {
+    const applicationCheckFollowUps = FOLLOWUP_SCHEDULE_DAYS[
+      FOLLOWUPTYPE.APPLICATION_CHECK
+    ].map((days, index) => ({
+      scheduledAt: new Date(Date.now() + days * 24 * 60 * 60 * 1000),
+      status: "PENDING",
+      type: FOLLOWUPTYPE.APPLICATION_CHECK,
+      sequence: index + 1,
+    }));
+
+    const { application, followUps } = await prisma.$transaction(async (tx) => {
       const applicationRecord = await tx.jobApplication.create({
         data: {
           userId,
@@ -40,11 +65,7 @@ export class ApplicationService {
           status: "APPLIED",
           appliedAt: new Date(appliedDate),
           followUps: {
-            create: {
-              scheduledAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-              status: "PENDING",
-              type:FOLLOWUPTYPE.APPLICATION_CHECK
-            },
+            create: applicationCheckFollowUps,
           },
         },
         select: {
@@ -55,9 +76,11 @@ export class ApplicationService {
             select: {
               id: true,
               scheduledAt: true,
+              status: true,
+              type: true,
+              sequence: true,
             },
-            orderBy: { createdAt: "desc" },
-            take: 1,
+            orderBy: { scheduledAt: "asc" },
           },
         },
       });
@@ -77,17 +100,65 @@ export class ApplicationService {
 
       return {
         application: applicationRecord,
-        followUp: applicationRecord.followUps[0],
+        followUps: applicationRecord.followUps,
       };
     });
+
+    const nextFollowUp = followUps[0];
 
     return {
       applicationId: application.id,
       status: application.status,
       appliedAt: application.appliedAt,
-      followUpId: followUp.id,
-      nextFollowUpAt: followUp.scheduledAt,
+      followUpId: nextFollowUp.id,
+      nextFollowUpAt: nextFollowUp.scheduledAt,
+      followUps: followUps.map(withFollowUpMessage),
     };
+  }
+
+  static async createStageFollowUp(application, type, sequence = 1) {
+    if (!type) return null;
+
+    const existing = await prisma.followUp.findFirst({
+      where: {
+        applicationId: application.id,
+        type,
+        sequence,
+        status: "PENDING",
+        executedAt: null,
+      },
+    });
+
+    if (existing) return existing;
+
+    const delayMs = getFollowUpDelayMs(type, sequence);
+    const followUp = await prisma.followUp.create({
+      data: {
+        applicationId: application.id,
+        scheduledAt: new Date(Date.now() + delayMs),
+        status: "PENDING",
+        type,
+        sequence,
+      },
+    });
+
+    if (application.company?.hrEmail) {
+      await FollowUpEmailScheduler.scheduleFollowUpJob({
+        followUpId: followUp.id,
+        type,
+        sequence,
+        hrEmail: application.company.hrEmail,
+        role: application.role,
+        company: application.company?.name,
+        appliedDate: application.appliedAt,
+        hrName: application.company?.hrName,
+        userName: application.user?.name,
+        userEmail: application.user?.email,
+        delayMs,
+      });
+    }
+
+    return followUp;
   }
 
   static async updateApplicationStatus(userId, applicationId, newStatus) {
@@ -131,12 +202,24 @@ export class ApplicationService {
       },
     });
 
+    const followUpType = FOLLOWUP_TYPE_BY_STATUS[newStatus];
+    if (followUpType) {
+      const applicationForFollowUp = await prisma.jobApplication.findUnique({
+        where: { id: applicationId },
+        include: {
+          company: true,
+          user: true,
+        },
+      });
+      const followUp = await this.createStageFollowUp(applicationForFollowUp, followUpType);
+      updated.latestFollowUp = withFollowUpMessage(followUp);
+    }
+
     return updated;
   }
 
   static async getApplications(userId) {
     const apps = await findAllByUser(userId);
-
     return apps.map((a) => ({
       id: a.id,
       company: a.company?.name || null,
@@ -151,7 +234,6 @@ export class ApplicationService {
             confidenceScore: a.ghostDetection.confidenceScore,
           }
         : null,
-      latestFollowUp: a.followUps[0] || null,
     }));
   }
 
@@ -159,7 +241,10 @@ export class ApplicationService {
     const app = await findById(id, userId);
     if (!app) throw new Error("Not found");
 
-    return app;
+    return {
+      ...app,
+      followUps: app.followUps.map(withFollowUpMessage),
+    };
   }
 
   static async updateApplication(id, userId, data) {
@@ -187,7 +272,8 @@ export class ApplicationService {
   }
 
   static async getUserFollowUps(id, userId) {
-    return getFollowUps(id, userId);
+    const followUps = await getFollowUps(id, userId);
+    return followUps.map(withFollowUpMessage);
   }
 
   static async getGhostApplication(id, userId) {
