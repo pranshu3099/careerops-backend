@@ -6,6 +6,10 @@ import { getNextCheckDelay } from "../services/ghostScheduler.service.js";
 import { ghostQueue } from "../queues/ghost.queue.js";
 import { followupQueue } from "../queues/followup.queue.js";
 const prisma = new PrismaClient();
+
+const createGhostJobId = (applicationId, delayMs) =>
+  `ghost-${applicationId}-${Date.now() + delayMs}`;
+
 export const ghostWorker = new Worker(
   "ghost-detection",
   async (job) => {
@@ -38,7 +42,7 @@ export const ghostWorker = new Worker(
       },
     });
 
-    if (score > 0.7 && followupCount < 2) {
+    if (score > 0.7 && followupCount < 2 && followUpId && hrEmail) {
       await followupQueue.add(
         "send-followup-reminder",
         {
@@ -53,7 +57,7 @@ export const ghostWorker = new Worker(
         },
         {
           delay: 5000,
-          jobId: `followup:${followUpId}`,
+          jobId: `followup-${followUpId}`,
           attempts: 3,
           backoff: {
             type: "exponential",
@@ -66,7 +70,8 @@ export const ghostWorker = new Worker(
     }
 
     const isGhosted = score >= 0.8;
-    const nextCheckAt = new Date(Date.now() + getNextCheckDelay(score))
+    const delay = getNextCheckDelay(score);
+    const nextCheckAt = new Date(Date.now() + delay);
     try {
       const existing = await prisma.ghostDetection.findUnique({
         where: { applicationId },
@@ -79,7 +84,7 @@ export const ghostWorker = new Worker(
             confidenceScore: score,
             isGhosted,
             lastCheckedAt: new Date(),
-            nextCheckAt
+            nextCheckAt,
           },
         });
       } else {
@@ -89,7 +94,7 @@ export const ghostWorker = new Worker(
             confidenceScore: score,
             isGhosted,
             lastCheckedAt: new Date(),
-            nextCheckAt
+            nextCheckAt,
           },
         });
       }
@@ -101,7 +106,7 @@ export const ghostWorker = new Worker(
             confidenceScore: score,
             isGhosted,
             lastCheckedAt: new Date(),
-            nextCheckAt
+            nextCheckAt,
           },
         });
       } else {
@@ -128,14 +133,12 @@ export const ghostWorker = new Worker(
       });
     }
 
-    const delay = getNextCheckDelay(score);
-
     await ghostQueue.add(
       "check-ghost",
       { applicationId },
       {
         delay,
-        jobId: applicationId,
+        jobId: createGhostJobId(applicationId, delay),
         removeOnComplete: true,
         attempts: 3,
         backoff: {
