@@ -51,6 +51,35 @@ export const getFollowUps = (applicationId, userId) => {
   });
 };
 
+export const getUpcomingFollowUps = (userId) => {
+  return prisma.followUp.findMany({
+    where: {
+      status: "PENDING",
+      executedAt: null,
+      application: {
+        userId,
+        isDeleted: false,
+      },
+    },
+    orderBy: [
+      { scheduledAt: "asc" },
+      { sequence: "asc" },
+    ],
+    include: {
+      application: {
+        include: {
+          company: true,
+          interviews: {
+            select: {
+              result: true,
+            },
+          },
+        },
+      },
+    },
+  });
+};
+
 export const getGhost = (applicationId, userId) => {
   return prisma.ghostDetection.findFirst({
     where: {
