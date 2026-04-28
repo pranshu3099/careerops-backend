@@ -16,8 +16,13 @@ class FollowUpEmailScheduler {
     delayMs = getFollowUpDelayMs(type, sequence),
   }) {
     try {
-      if (!hrEmail) {
-        throw new Error("Invalid user object passed to sendFollowupEmailJob");
+      const recipient = hrEmail?.trim();
+
+      if (!recipient) {
+        return {
+          skipped: true,
+          reason: "MISSING_HR_EMAIL",
+        };
       }
 
       await followupQueue.add(
@@ -26,7 +31,7 @@ class FollowUpEmailScheduler {
           followUpId,
           type,
           sequence,
-          to: hrEmail,
+          to: recipient,
           role,
           company,
           appliedDate,
@@ -37,7 +42,7 @@ class FollowUpEmailScheduler {
         },
         {
           delay: delayMs,
-          jobId: `followup:${followUpId}`,
+          jobId: `followup-${followUpId}`,
           attempts: 3,
           backoff: {
             type: "exponential",
@@ -48,7 +53,9 @@ class FollowUpEmailScheduler {
         },
       );
     } catch (error) {
-      const err = new Error("Failed to enqueue followup job");
+      const err = new Error(
+        `Failed to enqueue followup job: ${error.message}`,
+      );
       err.cause = error;
       throw err;
     }
