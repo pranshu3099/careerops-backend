@@ -20,6 +20,11 @@ router.patch(
 
 router.get("/", authenticate, ApplicationController.getApplications);
 router.get("/stats", authenticate, ApplicationController.getStats);
+router.get(
+  "/upcoming-followups",
+  authenticate,
+  ApplicationController.getUpcomingFollowUps,
+);
 
 router.get("/:id", authenticate, ApplicationController.getApplicationById);
 router.patch("/:id", authenticate, ApplicationController.updateApplication);
