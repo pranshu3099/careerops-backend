@@ -58,6 +58,8 @@ export const followupWorker = new Worker(
         include: {
           application: {
             include: {
+              company: true,
+              user: true,
               interviews: {
                 select: {
                   result: true,
@@ -102,18 +104,20 @@ export const followupWorker = new Worker(
         return;
       }
 
+      const recipient = typedFollowUp.application.company?.hrEmail?.trim() || to;
+
       // send email
       await sendFollowUpEmail({
         followUpId,
         type: typedFollowUp.type,
         sequence: typedFollowUp.sequence,
-        to,
-        role,
-        company,
-        appliedDate,
-        hrName,
-        userName,
-        userEmail,
+        to: recipient,
+        role: typedFollowUp.application.role || role,
+        company: typedFollowUp.application.company?.name || company,
+        appliedDate: typedFollowUp.application.appliedAt || appliedDate,
+        hrName: typedFollowUp.application.company?.hrName || hrName,
+        userName: typedFollowUp.application.user?.name || userName,
+        userEmail: typedFollowUp.application.user?.email || userEmail,
       });
 
       const updatedFollowUp = await prisma.followUp.update({
