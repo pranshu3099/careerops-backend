@@ -1,5 +1,5 @@
 export function mapSource(platform) {
-  switch (platform?.toLowerCase()) {
+  switch (platform?.toLowerCase().replace(/_/g, " ")) {
     case "linkedin":
       return "LINKEDIN";
     case "naukri":
