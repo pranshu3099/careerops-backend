@@ -60,14 +60,15 @@ const enqueueFollowUpJobs = async (followUps, jobData) => {
 export class ApplicationController {
   static async createApplicationHandler(req, res) {
     try {
-      const { userId, hrEmail, role, company, appliedDate, hrName } = req?.body;
-      const user = await getUser(userId);
+      const { hrEmail, role, company, appliedDate, hrName } = req?.body;
+      const userId = getAuthUserId(req);
       if (!userId) {
         return res.status(HTTP_STATUS.UNAUTHORIZED).json({
           success: false,
           message: "Unauthorized",
         });
       }
+      const user = await getUser(userId);
 
       const { applicationId, status, appliedAt, followUpId, nextFollowUpAt, followUps } =
         await ApplicationService.createApplication(userId, req.body);
@@ -121,7 +122,8 @@ export class ApplicationController {
   static async updateStatusHandler(req, res) {
     try {
       const { id } = req.params;
-      const { status, userId } = req.body;
+      const { status } = req.body;
+      const userId = getAuthUserId(req);
 
       if (!userId) {
         return res.status(HTTP_STATUS.UNAUTHORIZED).json({
@@ -186,6 +188,14 @@ export class ApplicationController {
         userId,
         req.body,
       );
+
+      if (data.appliedDateChanged) {
+        await enqueueGhostCheck(
+          { applicationId: req.params.id },
+          0,
+        );
+      }
+
       return res.status(HTTP_STATUS.OK).json(data);
     } catch (e) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({ message: e.message });
