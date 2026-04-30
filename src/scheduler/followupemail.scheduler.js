@@ -1,44 +1,20 @@
 import { followupQueue } from "../queues/followup.queue.js";
-import { FOLLOWUPTYPE, getFollowUpDelayMs, getFollowUpMessage } from "../constants/followup.js";
+import { FOLLOWUPTYPE, getFollowUpDelayMs } from "../constants/followup.js";
 
 class FollowUpEmailScheduler {
   static async scheduleFollowUpJob({
     followUpId,
     type = FOLLOWUPTYPE.APPLICATION_CHECK,
     sequence = 1,
-    hrEmail,
-    role,
-    company,
-    appliedDate,
-    hrName,
-    userName,
-    userEmail,
     delayMs = getFollowUpDelayMs(type, sequence),
   }) {
     try {
-      const recipient = hrEmail?.trim();
-
-      if (!recipient) {
-        return {
-          skipped: true,
-          reason: "MISSING_HR_EMAIL",
-        };
-      }
-
       await followupQueue.add(
         "send-followup-reminder",
         {
           followUpId,
           type,
           sequence,
-          to: recipient,
-          role,
-          company,
-          appliedDate,
-          hrName,
-          userName,
-          userEmail,
-          followupmessage: getFollowUpMessage(type, sequence),
         },
         {
           delay: delayMs,
@@ -61,29 +37,27 @@ class FollowUpEmailScheduler {
     }
   }
 
-  static async sendFollowupEmailJob(
-    followUpId,
-    hrEmail,
-    role,
-    company,
-    appliedDate,
-    hrName,
-    userName,
-    userEmail,
-  ) {
-    return this.scheduleFollowUpJob({
-      followUpId,
-      type: FOLLOWUPTYPE.APPLICATION_CHECK,
-      sequence: 1,
-      hrEmail,
-      role,
-      company,
-      appliedDate,
-      hrName,
-      userName,
-      userEmail,
-    });
+  static async rescheduleFollowUpJob(args) {
+    const existingJob = await followupQueue.getJob(`followup-${args.followUpId}`);
+
+    if (existingJob) {
+      try {
+        await existingJob.remove();
+      } catch (err) {
+        if (await existingJob.isActive()) {
+          return {
+            skipped: true,
+            reason: "JOB_ALREADY_ACTIVE",
+          };
+        }
+
+        throw err;
+      }
+    }
+
+    return this.scheduleFollowUpJob(args);
   }
+
 }
 
 export default FollowUpEmailScheduler;
