@@ -8,7 +8,6 @@ import {
   getStats,
   getUpcomingFollowUps as findUpcomingFollowUps,
   softDelete,
-  updateById,
 } from "./application.repo.js";
 import {
   FOLLOWUPTYPE,
@@ -20,6 +19,7 @@ import {
 import FollowUpEmailScheduler from "../../scheduler/followupemail.scheduler.js";
 const prisma = new PrismaClient();
 const INITIAL_GHOST_CHECK_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 const withFollowUpMessage = (followUp) =>
   followUp
@@ -61,17 +61,73 @@ const toUpcomingFollowUpResponse = (followUp) => ({
   applicationId: followUp.applicationId,
   company: followUp.application.company?.name || null,
   role: followUp.application.role,
+  location: followUp.application.location,
   type: followUp.type,
   sequence: followUp.sequence,
   scheduledAt: followUp.scheduledAt,
   status: followUp.application.status,
-  appliedAt:followUp.application.appliedAt,
+  appliedAt: followUp.application.appliedAt,
   message: getFollowUpMessage(followUp.type, followUp.sequence),
 });
 
+const getValidPendingFollowUpTypesForStatus = (status) => {
+  switch (status) {
+    case "APPLIED":
+      return [
+        FOLLOWUPTYPE.APPLICATION_CHECK,
+        FOLLOWUPTYPE.GENERAL_STATUS_CHECK,
+      ];
+    case "SHORTLISTED":
+      return [
+        FOLLOWUPTYPE.SHORTLISTED_CHECKIN,
+        FOLLOWUPTYPE.GENERAL_STATUS_CHECK,
+      ];
+    case "INTERVIEWING":
+      return [
+        FOLLOWUPTYPE.INTERVIEW_FEEDBACK,
+        FOLLOWUPTYPE.GENERAL_STATUS_CHECK,
+      ];
+    case "OFFERED":
+      return [FOLLOWUPTYPE.OFFER_FOLLOWUP, FOLLOWUPTYPE.GENERAL_STATUS_CHECK];
+    case "REJECTED":
+    case "GHOSTED":
+    default:
+      return [];
+  }
+};
+
+const cancelInvalidPendingFollowUps = (tx, applicationId, status) => {
+  const validTypes = getValidPendingFollowUpTypesForStatus(status);
+
+  return tx.followUp.updateMany({
+    where: {
+      applicationId,
+      status: "PENDING",
+      executedAt: null,
+      ...(validTypes.length ? { type: { notIn: validTypes } } : {}),
+    },
+    data: {
+      status: "CANCELLED",
+    },
+  });
+};
+
+const isSameTime = (a, b) => a?.getTime() === b?.getTime();
+
+const trimIfString = (value) =>
+  typeof value === "string" ? value.trim() : value;
+
+const getApplicationCheckScheduledAt = (appliedAt, sequence) => {
+  const days =
+    FOLLOWUP_SCHEDULE_DAYS[FOLLOWUPTYPE.APPLICATION_CHECK]?.[sequence - 1];
+
+  return days ? new Date(appliedAt.getTime() + days * MS_PER_DAY) : null;
+};
+
 export class ApplicationService {
   static async createApplication(userId, data) {
-    const { company, role, location, platform, appliedDate, hrEmail, hrName } = data;
+    const { company, role, location, platform, appliedDate, hrEmail, hrName } =
+      data;
 
     let companyRecord = await prisma.company.findFirst({
       where: { name: company },
@@ -121,7 +177,9 @@ export class ApplicationService {
           ghostDetection: {
             create: {
               lastCheckedAt: now,
-              nextCheckAt: new Date(now.getTime() + INITIAL_GHOST_CHECK_DELAY_MS),
+              nextCheckAt: new Date(
+                now.getTime() + INITIAL_GHOST_CHECK_DELAY_MS,
+              ),
               confidenceScore: 0,
               isGhosted: false,
             },
@@ -201,26 +259,17 @@ export class ApplicationService {
       },
     });
 
-    if (application.company?.hrEmail) {
-      try {
-        await FollowUpEmailScheduler.scheduleFollowUpJob({
-          followUpId: followUp.id,
-          type,
-          sequence,
-          hrEmail: application.company.hrEmail,
-          role: application.role,
-          company: application.company?.name,
-          appliedDate: application.appliedAt,
-          hrName: application.company?.hrName,
-          userName: application.user?.name,
-          userEmail: application.user?.email,
-          delayMs,
-        });
-      } catch (err) {
-        console.error(
-          `Failed to enqueue followup ${followUp.id}: ${err.message}`,
-        );
-      }
+    try {
+      await FollowUpEmailScheduler.scheduleFollowUpJob({
+        followUpId: followUp.id,
+        type,
+        sequence,
+        delayMs,
+      });
+    } catch (err) {
+      console.error(
+        `Failed to enqueue followup ${followUp.id}: ${err.message}`,
+      );
     }
 
     return followUp;
@@ -250,21 +299,27 @@ export class ApplicationService {
       updateData.ghostedAt = new Date();
     }
 
-    const updated = await prisma.jobApplication.update({
-      where: { id: applicationId },
-      data: updateData,
-    });
+    const updated = await prisma.$transaction(async (tx) => {
+      const updatedApplication = await tx.jobApplication.update({
+        where: { id: applicationId },
+        data: updateData,
+      });
 
-    await prisma.eventLog.create({
-      data: {
-        userId,
-        applicationId,
-        type: "STATUS_UPDATED",
-        payload: {
-          from: app.status,
-          to: newStatus,
+      await cancelInvalidPendingFollowUps(tx, applicationId, newStatus);
+
+      await tx.eventLog.create({
+        data: {
+          userId,
+          applicationId,
+          type: "STATUS_UPDATED",
+          payload: {
+            from: app.status,
+            to: newStatus,
+          },
         },
-      },
+      });
+
+      return updatedApplication;
     });
 
     const followUpType = FOLLOWUP_TYPE_BY_STATUS[newStatus];
@@ -276,7 +331,10 @@ export class ApplicationService {
           user: true,
         },
       });
-      const followUp = await this.createStageFollowUp(applicationForFollowUp, followUpType);
+      const followUp = await this.createStageFollowUp(
+        applicationForFollowUp,
+        followUpType,
+      );
       updated.latestFollowUp = withFollowUpMessage(followUp);
     }
 
@@ -288,8 +346,11 @@ export class ApplicationService {
     return apps.map((a) => ({
       id: a.id,
       company: a.company?.name || null,
+      hrName: a.company.hrName,
+      hrEmail: a.company.hrEmail,
       role: a.role,
-      platform: a.source,
+      location: a.location,
+      source: a.source,
       appliedAt: a.appliedAt,
       currentStatus: a.status,
       lastResponseAt: a.lastResponseAt || null,
@@ -313,22 +374,192 @@ export class ApplicationService {
   }
 
   static async updateApplication(id, userId, data) {
-    const allowed = [
-      "role",
-      "location",
-      "platform",
-      "hrEmail",
-      "appliedDate",
-      "notes",
-    ];
-
-    const updateData = {};
-    allowed.forEach((key) => {
-      if (data[key] !== undefined) updateData[key] = data[key];
+    const application = await prisma.jobApplication.findFirst({
+      where: { id, userId, isDeleted: false },
+      include: { company: true },
     });
 
-    await updateById(id, userId, updateData);
-    return { success: true };
+    if (!application) throw new Error("Application not found");
+    if (["REJECTED", "OFFERED", "GHOSTED"].includes(application.status)) {
+      throw new Error("Application cannot be edited after it is closed");
+    }
+
+    const applicationData = {};
+    const companyData = {};
+    const changedFields = [];
+    let appliedDateChanged = false;
+
+    if (data.role !== undefined) {
+      const role = trimIfString(data.role);
+      if (role && role !== application.role) {
+        applicationData.role = role;
+        changedFields.push("role");
+      }
+    }
+
+    if (data.location !== undefined) {
+      const location = trimIfString(data.location);
+      if (location !== application.location) {
+        applicationData.location = location;
+        changedFields.push("location");
+      }
+    }
+
+    const sourceInput = data.source ?? data.platform;
+    if (sourceInput !== undefined) {
+      const source = mapSource(sourceInput);
+      if (source !== application.source) {
+        applicationData.source = source;
+        changedFields.push("source");
+      }
+    }
+
+    if (data.appliedDate !== undefined && application.status !== "APPLIED") {
+      throw new Error(
+        "Applied date can only be updated while application is APPLIED",
+      );
+    }
+
+    if (data.appliedDate !== undefined) {
+      const appliedAt = new Date(data.appliedDate);
+
+      if (Number.isNaN(appliedAt.getTime())) {
+        throw new Error("Invalid appliedDate");
+      }
+
+      if (!isSameTime(appliedAt, application.appliedAt)) {
+        applicationData.appliedAt = appliedAt;
+        appliedDateChanged = true;
+        changedFields.push("appliedDate");
+      }
+    }
+
+    if (data.hrName !== undefined) {
+      const hrName = trimIfString(data.hrName);
+      if (hrName !== application.company?.hrName) {
+        companyData.hrName = hrName;
+        changedFields.push("hrName");
+      }
+    }
+
+    if (data.hrEmail !== undefined) {
+      const hrEmail = trimIfString(data.hrEmail);
+      if (hrEmail !== application.company?.hrEmail) {
+        companyData.hrEmail = hrEmail;
+        changedFields.push("hrEmail");
+      }
+    }
+
+    if (!changedFields.length) {
+      return {
+        success: true,
+        updated: false,
+        changedFields,
+      };
+    }
+
+    const followUpsToReschedule = await prisma.$transaction(async (tx) => {
+      if (Object.keys(applicationData).length) {
+        await tx.jobApplication.update({
+          where: { id },
+          data: applicationData,
+        });
+      }
+
+      if (Object.keys(companyData).length) {
+        await tx.company.update({
+          where: { id: application.companyId },
+          data: companyData,
+        });
+      }
+
+      if (!appliedDateChanged) return [];
+
+      const pendingApplicationFollowUps = await tx.followUp.findMany({
+        where: {
+          applicationId: id,
+          type: FOLLOWUPTYPE.APPLICATION_CHECK,
+          status: "PENDING",
+          executedAt: null,
+          sequence: { not: null },
+        },
+        select: {
+          id: true,
+          type: true,
+          sequence: true,
+          scheduledAt: true,
+        },
+      });
+
+      const rescheduled = [];
+      const nextAppliedAt = applicationData.appliedAt;
+
+      for (const followUp of pendingApplicationFollowUps) {
+        const scheduledAt = getApplicationCheckScheduledAt(
+          nextAppliedAt,
+          followUp.sequence,
+        );
+
+        if (!scheduledAt || isSameTime(scheduledAt, followUp.scheduledAt)) {
+          continue;
+        }
+
+        await tx.followUp.update({
+          where: { id: followUp.id },
+          data: { scheduledAt },
+        });
+
+        rescheduled.push({
+          ...followUp,
+          oldScheduledAt: followUp.scheduledAt,
+          scheduledAt,
+          newScheduledAt: scheduledAt,
+        });
+      }
+
+      return rescheduled;
+    });
+
+    const rescheduleResults = await Promise.allSettled(
+      followUpsToReschedule.map((followUp) =>
+        FollowUpEmailScheduler.rescheduleFollowUpJob({
+          followUpId: followUp.id,
+          type: followUp.type,
+          sequence: followUp.sequence,
+          delayMs: Math.max(followUp.scheduledAt.getTime() - Date.now(), 0),
+        }),
+      ),
+    );
+
+    rescheduleResults.forEach((result, index) => {
+      if (result.status === "rejected") {
+        console.error(
+          `Failed to reschedule followup ${followUpsToReschedule[index].id}: ${result.reason?.message}`,
+        );
+      }
+    });
+
+    const response = {
+      success: true,
+      updated: true,
+      changedFields,
+      appliedDateChanged,
+      rescheduledFollowUps: followUpsToReschedule.length,
+      rescheduledFollowUps: followUpsToReschedule.length,
+      role: applicationData.role ?? application.role,
+      company: application.company?.name ?? null,
+      hrEmail: application.company?.hrEmail,
+      hrName: application.company?.hrName,
+      source: application.source,
+      appliedAt : application.appliedAt,
+      scheduleChanges: followUpsToReschedule?.map((followUp) => ({
+        followUpId: followUp.id,
+        oldScheduledAt: followUp.oldScheduledAt,
+        newScheduledAt: followUp.newScheduledAt,
+      })),
+    };
+
+    return response;
   }
 
   static async deleteApplication(id, userId) {
