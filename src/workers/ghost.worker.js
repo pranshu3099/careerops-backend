@@ -13,17 +13,7 @@ const createGhostJobId = (applicationId, delayMs) =>
 export const ghostWorker = new Worker(
   "ghost-detection",
   async (job) => {
-    const {
-      applicationId,
-      followUpId,
-      hrEmail,
-      role,
-      company,
-      appliedDate,
-      hrName,
-      userName,
-      userEmail,
-    } = job.data;
+    const { applicationId, followUpId } = job.data;
 
     const app = await prisma.jobApplication.findUnique({
       where: { id: applicationId },
@@ -42,18 +32,11 @@ export const ghostWorker = new Worker(
       },
     });
 
-    if (score > 0.7 && followupCount < 2 && followUpId && hrEmail) {
+    if (score > 0.7 && followupCount < 2 && followUpId) {
       await followupQueue.add(
         "send-followup-reminder",
         {
           followUpId,
-          to: hrEmail,
-          role,
-          company,
-          appliedDate,
-          hrName,
-          userName,
-          userEmail,
         },
         {
           delay: 5000,
