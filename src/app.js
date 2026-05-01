@@ -4,6 +4,9 @@ import cors from "cors";
 import passport from "./config/passport.js";
 import authRoutes from "../src/modules/auth/auth.routes.js";
 import applicationRoutes from "../src/modules/application/application.routes.js";
+import followUpRoutes, {
+  legacyFollowUpRoutes,
+} from "../src/modules/followup/followup.routes.js";
 
 const app = express();
 app.use(
@@ -17,6 +20,8 @@ app.use(cookieParser());
 app.use(passport.initialize());
 
 app.use("/auth", authRoutes);
+app.use("/followups", followUpRoutes);
+app.use("/applications", legacyFollowUpRoutes);
 app.use("/applications", applicationRoutes);
 
 export default app;
