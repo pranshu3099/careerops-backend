@@ -19,7 +19,7 @@ export const ghostWorker = new Worker(
       where: { id: applicationId },
     });
 
-    if (!app) return;
+    if (!app || app.isDeleted) return;
 
     if (["REJECTED", "OFFERED"].includes(app.status)) return;
 
