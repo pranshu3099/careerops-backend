@@ -38,24 +38,34 @@ class FollowUpEmailScheduler {
   }
 
   static async rescheduleFollowUpJob(args) {
-    const existingJob = await followupQueue.getJob(`followup-${args.followUpId}`);
-
-    if (existingJob) {
-      try {
-        await existingJob.remove();
-      } catch (err) {
-        if (await existingJob.isActive()) {
-          return {
-            skipped: true,
-            reason: "JOB_ALREADY_ACTIVE",
-          };
-        }
-
-        throw err;
-      }
-    }
+    await this.removeFollowUpJob(args.followUpId);
 
     return this.scheduleFollowUpJob(args);
+  }
+
+  static async removeFollowUpJob(followUpId) {
+    const existingJob = await followupQueue.getJob(`followup-${followUpId}`);
+
+    if (!existingJob) {
+      return {
+        removed: false,
+        reason: "NOT_FOUND",
+      };
+    }
+
+    try {
+      await existingJob.remove();
+      return { removed: true };
+    } catch (err) {
+      if (await existingJob.isActive()) {
+        return {
+          removed: false,
+          reason: "JOB_ALREADY_ACTIVE",
+        };
+      }
+
+      throw err;
+    }
   }
 
 }
