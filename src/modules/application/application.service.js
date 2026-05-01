@@ -3,11 +3,8 @@ import { mapSource, isValidTransition } from "../../utils/application.js";
 import {
   findAllByUser,
   findById,
-  getFollowUps,
   getGhost,
   getStats,
-  getUpcomingFollowUps as findUpcomingFollowUps,
-  softDelete,
 } from "./application.repo.js";
 import {
   FOLLOWUPTYPE,
@@ -28,47 +25,6 @@ const withFollowUpMessage = (followUp) =>
         message: getFollowUpMessage(followUp.type, followUp.sequence),
       }
     : null;
-
-const hasInterviewResult = (interviews = []) =>
-  interviews.some(
-    (interview) => interview.result && interview.result !== "PENDING",
-  );
-
-const isUpcomingFollowUpValid = (followUp) => {
-  const application = followUp.application;
-
-  switch (followUp.type) {
-    case FOLLOWUPTYPE.APPLICATION_CHECK:
-      return application.status === "APPLIED";
-    case FOLLOWUPTYPE.SHORTLISTED_CHECKIN:
-      return application.status === "SHORTLISTED";
-    case FOLLOWUPTYPE.INTERVIEW_FEEDBACK:
-      return (
-        application.status === "INTERVIEWING" &&
-        !hasInterviewResult(application.interviews)
-      );
-    case FOLLOWUPTYPE.OFFER_FOLLOWUP:
-      return application.status === "OFFERED";
-    case FOLLOWUPTYPE.GENERAL_STATUS_CHECK:
-      return !["REJECTED", "GHOSTED"].includes(application.status);
-    default:
-      return false;
-  }
-};
-
-const toUpcomingFollowUpResponse = (followUp) => ({
-  followUpId: followUp.id,
-  applicationId: followUp.applicationId,
-  company: followUp.application.company?.name || null,
-  role: followUp.application.role,
-  location: followUp.application.location,
-  type: followUp.type,
-  sequence: followUp.sequence,
-  scheduledAt: followUp.scheduledAt,
-  status: followUp.application.status,
-  appliedAt: followUp.application.appliedAt,
-  message: getFollowUpMessage(followUp.type, followUp.sequence),
-});
 
 const getValidPendingFollowUpTypesForStatus = (status) => {
   switch (status) {
@@ -545,47 +501,87 @@ export class ApplicationService {
       changedFields,
       appliedDateChanged,
       rescheduledFollowUps: followUpsToReschedule.length,
-      rescheduledFollowUps: followUpsToReschedule.length,
-      role: applicationData.role ?? application.role,
-      company: application.company?.name ?? null,
-      hrEmail: application.company?.hrEmail,
-      hrName: application.company?.hrName,
-      source: application.source,
-      appliedAt : application.appliedAt,
-      scheduleChanges: followUpsToReschedule?.map((followUp) => ({
+    };
+
+    if (followUpsToReschedule.length > 0) {
+      response.role = applicationData.role ?? application.role;
+      response.company = application.company?.name ?? null;
+      response.scheduleChanges = followUpsToReschedule.map((followUp) => ({
         followUpId: followUp.id,
         oldScheduledAt: followUp.oldScheduledAt,
         newScheduledAt: followUp.newScheduledAt,
-      })),
-    };
+      }));
+    }
 
     return response;
   }
 
   static async deleteApplication(id, userId) {
-    await softDelete(id, userId);
-    return { success: true };
-  }
+    const { application, pendingFollowUps } = await prisma.$transaction(async (tx) => {
+      const application = await tx.jobApplication.findFirst({
+        where: { id, userId, isDeleted: false },
+        select: {
+          id: true,
+          role: true,
+          company: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      });
 
-  static async getUserFollowUps(id, userId) {
-    const followUps = await getFollowUps(id, userId);
-    return followUps.map(withFollowUpMessage);
-  }
+      if (!application) throw new Error("Application not found");
 
-  static async getUpcomingFollowUps(userId) {
-    const followUps = await findUpcomingFollowUps(userId);
-    const nextByApplication = new Map();
-    followUps.forEach((followUp) => {
-      if (nextByApplication.has(followUp.applicationId)) return;
-      if (!isUpcomingFollowUpValid(followUp)) return;
+      const pendingFollowUps = await tx.followUp.findMany({
+        where: {
+          applicationId: id,
+          status: "PENDING",
+          executedAt: null,
+        },
+        select: { id: true },
+      });
 
-      nextByApplication.set(
-        followUp.applicationId,
-        toUpcomingFollowUpResponse(followUp),
-      );
+      await tx.jobApplication.update({
+        where: { id },
+        data: { isDeleted: true },
+      });
+
+      if (pendingFollowUps.length > 0) {
+        await tx.followUp.updateMany({
+          where: {
+            applicationId: id,
+            status: "PENDING",
+            executedAt: null,
+          },
+          data: { status: "CANCELLED" },
+        });
+      }
+
+      return { application, pendingFollowUps };
     });
 
-    return [...nextByApplication.values()];
+    const queueResults = await Promise.allSettled(
+      pendingFollowUps.map((followUp) =>
+        FollowUpEmailScheduler.removeFollowUpJob(followUp.id),
+      ),
+    );
+
+    queueResults.forEach((result, index) => {
+      if (result.status === "rejected") {
+        console.error(
+          `Failed to remove followup job ${pendingFollowUps[index].id}: ${result.reason?.message}`,
+        );
+      }
+    });
+
+    return {
+      success: true,
+      deleted: true,
+      role: application.role,
+      company: application.company?.name ?? null,
+      cancelledFollowUps: pendingFollowUps.length,
+    };
   }
 
   static async getGhostApplication(id, userId) {
