@@ -215,31 +215,6 @@ export class ApplicationController {
     }
   }
 
-  static async getFollowUps(req, res) {
-    try {
-      const userId = getAuthUserId(req);
-      const data = await ApplicationService.getUserFollowUps(
-        req.params.id,
-        userId,
-      );
-      return res.status(HTTP_STATUS.OK).json(data);
-    } catch (e) {
-      return res.status(HTTP_STATUS.NOT_FOUND).json({ message: e.message });
-    }
-  }
-
-  static async getUpcomingFollowUps(req, res) {
-    try {
-      const userId = getAuthUserId(req);
-      const data = await ApplicationService.getUpcomingFollowUps(userId);
-      return res.status(HTTP_STATUS.OK).json(data);
-    } catch (e) {
-      return res
-        .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
-        .json({ message: e.message });
-    }
-  }
-
   static async getGhost(req, res) {
     try {
       const userId = getAuthUserId(req);
