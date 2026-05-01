@@ -23,11 +23,6 @@ router.patch(
 
 router.get("/", authenticate, ApplicationController.getApplications);
 router.get("/stats", authenticate, ApplicationController.getStats);
-router.get(
-  "/upcoming-followups",
-  authenticate,
-  ApplicationController.getUpcomingFollowUps,
-);
 
 router.get("/:id", authenticate, ApplicationController.getApplicationById);
 router.patch(
@@ -36,9 +31,8 @@ router.patch(
   validateRequest(updateApplicationSchema),
   ApplicationController.updateApplication,
 );
-router.delete("/:id", authenticate, ApplicationController.deleteApplication);
+router.delete("/delete/:id", authenticate, ApplicationController.deleteApplication);
 
-router.get("/:id/followups", authenticate, ApplicationController.getFollowUps);
 router.get("/:id/ghost", authenticate, ApplicationController.getGhost);
 
 export default router;
