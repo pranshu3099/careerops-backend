@@ -12,6 +12,8 @@ const hasInterviewResult = (interviews = []) =>
 const isFollowUpStillValid = (followUp) => {
   const app = followUp.application;
 
+  if (!app || app.isDeleted) return false;
+
   switch (followUp.type) {
     case FOLLOWUPTYPE.SHORTLISTED_CHECKIN:
       return app.status === "SHORTLISTED";
@@ -79,6 +81,14 @@ export const followupWorker = new Worker(
         console.log(
           `Skipping followUp ${followUpId} because status is ${followUp.status}`,
         );
+        return;
+      }
+
+      if (followUp.application?.isDeleted) {
+        await prisma.followUp.update({
+          where: { id: followUpId },
+          data: { status: "CANCELLED" },
+        });
         return;
       }
 
