@@ -31,4 +31,17 @@ export class FollowUpController {
         .json({ message: e.message });
     }
   }
+
+  static async getDueSoonFollowUps(req, res) {
+    try {
+      const userId = getAuthUserId(req);
+      const data = await FollowUpService.getDueSoonFollowUps(userId);
+
+      return res.status(HTTP_STATUS.OK).json(data);
+    } catch (e) {
+      return res
+        .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
+        .json({ message: e.message });
+    }
+  }
 }
