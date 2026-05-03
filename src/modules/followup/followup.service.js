@@ -1,8 +1,11 @@
 import { FOLLOWUPTYPE, getFollowUpMessage } from "../../constants/followup.js";
 import {
   findByApplication,
+  findDueSoonByUser,
   findUpcomingByUser,
 } from "./followup.repo.js";
+
+const DUE_SOON_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const withFollowUpMessage = (followUp) =>
   followUp
@@ -53,6 +56,24 @@ const toUpcomingFollowUpResponse = (followUp) => ({
   message: getFollowUpMessage(followUp.type, followUp.sequence),
 });
 
+const toDueSoonFollowUpResponse = (followUp) => ({
+  ...toUpcomingFollowUpResponse(followUp),
+  alert: {
+    title: "Follow-up scheduled soon",
+    message: `Follow-up scheduled soon for ${followUp.application.role} at ${
+      followUp.application.company?.name || "this company"
+    }.`,
+    actions: ["UPDATE_STATUS", "VIEW_APPLICATION"],
+  },
+});
+
+export const getEndOfTomorrow = (now) => {
+  const end = new Date(now);
+  end.setDate(end.getDate() + 1);
+  end.setHours(23, 59, 59, 999);
+  return end;
+};
+
 export class FollowUpService {
   static async getApplicationFollowUps(applicationId, userId) {
     const followUps = await findByApplication(applicationId, userId);
@@ -74,5 +95,14 @@ export class FollowUpService {
     });
 
     return [...nextByApplication.values()];
+  }
+
+  static async getDueSoonFollowUps(userId, now = new Date()) {
+    const windowEnd = getEndOfTomorrow(now);
+    const followUps = await findDueSoonByUser(userId, now, windowEnd);
+
+    return followUps
+      .filter(isUpcomingFollowUpValid)
+      .map(toDueSoonFollowUpResponse);
   }
 }
