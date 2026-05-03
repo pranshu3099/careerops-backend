@@ -27,6 +27,4 @@ legacyFollowUpRoutes.get(
 );
 
 legacyFollowUpRoutes.get("/due-soon", authenticate, FollowUpController.getDueSoonFollowUps);
-
-
 export default router;
