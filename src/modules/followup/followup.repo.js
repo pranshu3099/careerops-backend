@@ -40,3 +40,33 @@ export const findUpcomingByUser = (userId) => {
     },
   });
 };
+
+export const findDueSoonByUser = (userId, from, to) => {
+  return prisma.followUp.findMany({
+    where: {
+      status: "PENDING",
+      executedAt: null,
+      scheduledAt: {
+        gte: from,
+        lte: to,
+      },
+      application: {
+        userId,
+        isDeleted: false,
+      },
+    },
+    orderBy: [{ scheduledAt: "asc" }, { sequence: "asc" }],
+    include: {
+      application: {
+        include: {
+          company: true,
+          interviews: {
+            select: {
+              result: true,
+            },
+          },
+        },
+      },
+    },
+  });
+};
