@@ -7,6 +7,7 @@ import applicationRoutes from "../src/modules/application/application.routes.js"
 import followUpRoutes, {
   legacyFollowUpRoutes,
 } from "../src/modules/followup/followup.routes.js";
+import interviewRoutes from "../src/modules/interview/interview.routes.js";
 
 const app = express();
 app.use(
@@ -21,6 +22,7 @@ app.use(passport.initialize());
 
 app.use("/auth", authRoutes);
 app.use("/followups", followUpRoutes);
+app.use("/interviews", interviewRoutes);
 app.use("/applications", legacyFollowUpRoutes);
 app.use("/applications", applicationRoutes);
 
