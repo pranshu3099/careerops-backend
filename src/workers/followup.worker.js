@@ -6,8 +6,20 @@ import { sendFollowUpEmail } from "../utils/followupmailer.js";
 import { FOLLOWUPTYPE } from "../constants/followup.js";
 const prisma = new PrismaClient();
 
-const hasInterviewResult = (interviews = []) =>
-  interviews.some((interview) => interview.result && interview.result !== "PENDING");
+const getLatestActiveInterview = (interviews = []) =>
+  interviews
+    .filter((interview) => interview.status !== "CANCELLED")
+    .sort((a, b) => b.scheduledAt.getTime() - a.scheduledAt.getTime())[0];
+
+const isInterviewFeedbackFollowUpValid = (app) => {
+  if (app.status !== "INTERVIEWING") return false;
+
+  const latestInterview = getLatestActiveInterview(app.interviews);
+  if (!latestInterview) return false;
+  if (latestInterview.scheduledAt > new Date()) return false;
+
+  return !latestInterview.result || latestInterview.result === "PENDING";
+};
 
 const isFollowUpStillValid = (followUp) => {
   const app = followUp.application;
@@ -18,7 +30,7 @@ const isFollowUpStillValid = (followUp) => {
     case FOLLOWUPTYPE.SHORTLISTED_CHECKIN:
       return app.status === "SHORTLISTED";
     case FOLLOWUPTYPE.INTERVIEW_FEEDBACK:
-      return app.status === "INTERVIEWING" && !hasInterviewResult(app.interviews);
+      return isInterviewFeedbackFollowUpValid(app);
     case FOLLOWUPTYPE.OFFER_FOLLOWUP:
       return app.status === "OFFERED";
     case FOLLOWUPTYPE.GENERAL_STATUS_CHECK:
@@ -65,6 +77,8 @@ export const followupWorker = new Worker(
               interviews: {
                 select: {
                   result: true,
+                  scheduledAt: true,
+                  status: true,
                 },
               },
             },
