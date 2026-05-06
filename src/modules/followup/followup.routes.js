@@ -5,6 +5,7 @@ import { FollowUpController } from "./followup.controller.js";
 
 const router = Router();
 
+router.get("/", authenticate, FollowUpController.getAllFollowUps);
 router.get("/due-soon", authenticate, FollowUpController.getDueSoonFollowUps);
 router.get("/upcoming", authenticate, FollowUpController.getUpcomingFollowUps);
 router.get(
@@ -26,5 +27,10 @@ legacyFollowUpRoutes.get(
   FollowUpController.getApplicationFollowUps,
 );
 
-legacyFollowUpRoutes.get("/due-soon", authenticate, FollowUpController.getDueSoonFollowUps);
+legacyFollowUpRoutes.get(
+  "/due-soon",
+  authenticate,
+  FollowUpController.getDueSoonFollowUps,
+);
+
 export default router;
