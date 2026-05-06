@@ -155,6 +155,9 @@ The ghost scoring service evaluates factors such as:
 - Days since the latest response.
 - Current application status.
 
+The confidence score is a number between 0 and 1 that represents how likely an application is to be ghosted. CareerOps calculates it from signals such as time since applying, whether the user has received a response, time since the latest response, and the current application status. A higher score means the application appears more stale, so the system checks it more frequently and may eventually mark it as ghosted.
+
+
 The score is capped between 0 and 1. Applications with high scores are marked as ghosted when the confidence threshold is reached. Ghost detection jobs also reschedule future checks dynamically:
 
 - High confidence applications are checked more frequently.
