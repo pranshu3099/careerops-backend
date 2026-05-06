@@ -51,26 +51,38 @@ export const getGhost = (applicationId, userId) => {
 };
 
 export const getStats = async (userId) => {
-  const apps = await prisma.jobApplication.findMany({
-    where: { userId, isDeleted: false },
-    include: { ghostDetection: true },
+  const grouped = await prisma.jobApplication.groupBy({
+    by: ["status"],
+    where: {
+      userId,
+      isDeleted: false,
+    },
+    _count: {
+      status: true,
+    },
   });
 
   const stats = {
     applied: 0,
+    shortlisted: 0,
     interviewing: 0,
     offered: 0,
     rejected: 0,
     ghosted: 0,
   };
 
-  apps.forEach((a) => {
-    if (a.status === "APPLIED") stats.applied++;
-    if (a.status === "INTERVIEWING") stats.interviewing++;
-    if (a.status === "OFFERED") stats.offered++;
-    if (a.status === "REJECTED") stats.rejected++;
-    if (a.ghostDetection?.isGhosted) stats.ghosted++;
+  grouped.forEach((item) => {
+    const count = item._count.status;
+
+    if (item.status === "APPLIED") stats.applied = count;
+    if (item.status === "SHORTLISTED") stats.shortlisted = count;
+    if (item.status === "INTERVIEWING") stats.interviewing = count;
+    if (item.status === "OFFERED") stats.offered = count;
+    if (item.status === "REJECTED") stats.rejected = count;
+    if (item.status === "GHOSTED") stats.ghosted = count;
   });
 
   return stats;
 };
+
+
