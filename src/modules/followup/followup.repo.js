@@ -15,6 +15,25 @@ export const findByApplication = (applicationId, userId) => {
   });
 };
 
+export const findAllByUser = (userId) => {
+  return prisma.followUp.findMany({
+    where: {
+      application: {
+        userId,
+        isDeleted: false,
+      },
+    },
+    orderBy: [{ scheduledAt: "desc" }, { sequence: "asc" }],
+    include: {
+      application: {
+        include: {
+          company: true,
+        },
+      },
+    },
+  });
+};
+
 export const findUpcomingByUser = (userId) => {
   return prisma.followUp.findMany({
     where: {
@@ -33,6 +52,8 @@ export const findUpcomingByUser = (userId) => {
           interviews: {
             select: {
               result: true,
+              scheduledAt: true,
+              status: true,
             },
           },
         },
@@ -63,6 +84,8 @@ export const findDueSoonByUser = (userId, from, to) => {
           interviews: {
             select: {
               result: true,
+              scheduledAt: true,
+              status: true,
             },
           },
         },
