@@ -100,6 +100,7 @@ export class ApplicationService {
         userId,
         companyId: companyRecord.id,
         role,
+        isDeleted:false
       },
     });
 
