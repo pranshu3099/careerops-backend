@@ -1,5 +1,6 @@
 import { FOLLOWUPTYPE, getFollowUpMessage } from "../../constants/followup.js";
 import {
+  findAllByUser,
   findByApplication,
   findDueSoonByUser,
   findUpcomingByUser,
@@ -15,10 +16,20 @@ const withFollowUpMessage = (followUp) =>
       }
     : null;
 
-const hasInterviewResult = (interviews = []) =>
-  interviews.some(
-    (interview) => interview.result && interview.result !== "PENDING",
-  );
+const getLatestActiveInterview = (interviews = []) =>
+  interviews
+    .filter((interview) => interview.status !== "CANCELLED")
+    .sort((a, b) => b.scheduledAt.getTime() - a.scheduledAt.getTime())[0];
+
+const isInterviewFeedbackFollowUpValid = (application) => {
+  if (application.status !== "INTERVIEWING") return false;
+
+  const latestInterview = getLatestActiveInterview(application.interviews);
+  if (!latestInterview) return false;
+  if (latestInterview.scheduledAt > new Date()) return false;
+
+  return !latestInterview.result || latestInterview.result === "PENDING";
+};
 
 const isUpcomingFollowUpValid = (followUp) => {
   const application = followUp.application;
@@ -29,10 +40,7 @@ const isUpcomingFollowUpValid = (followUp) => {
     case FOLLOWUPTYPE.SHORTLISTED_CHECKIN:
       return application.status === "SHORTLISTED";
     case FOLLOWUPTYPE.INTERVIEW_FEEDBACK:
-      return (
-        application.status === "INTERVIEWING" &&
-        !hasInterviewResult(application.interviews)
-      );
+      return isInterviewFeedbackFollowUpValid(application);
     case FOLLOWUPTYPE.OFFER_FOLLOWUP:
       return application.status === "OFFERED";
     case FOLLOWUPTYPE.GENERAL_STATUS_CHECK:
@@ -40,6 +48,38 @@ const isUpcomingFollowUpValid = (followUp) => {
     default:
       return false;
   }
+};
+
+const isApplicationCheckFollowUpValid = (followUp) =>
+  followUp.application.status === "APPLIED";
+
+const isPendingApplicationCheck = (followUp) =>
+  followUp.type === FOLLOWUPTYPE.APPLICATION_CHECK &&
+  followUp.status === "PENDING";
+
+const filterApplicationCheckFollowUps = (followUps) => {
+  const nextApplicationCheckIds = new Set();
+  const nextByApplication = new Set();
+
+  [...followUps]
+    .sort((a, b) => {
+      const scheduledDiff = a.scheduledAt.getTime() - b.scheduledAt.getTime();
+      return scheduledDiff || a.sequence - b.sequence;
+    })
+    .forEach((followUp) => {
+      if (!isPendingApplicationCheck(followUp)) return;
+      if (nextByApplication.has(followUp.applicationId)) return;
+      if (!isApplicationCheckFollowUpValid(followUp)) return;
+
+      nextByApplication.add(followUp.applicationId);
+      nextApplicationCheckIds.add(followUp.id);
+    });
+
+  return followUps.filter(
+    (followUp) =>
+      !isPendingApplicationCheck(followUp) ||
+      nextApplicationCheckIds.has(followUp.id),
+  );
 };
 
 const toUpcomingFollowUpResponse = (followUp) => ({
@@ -67,6 +107,22 @@ const toDueSoonFollowUpResponse = (followUp) => ({
   },
 });
 
+const toFollowUpResponse = (followUp) => ({
+  followUpId: followUp.id,
+  applicationId: followUp.applicationId,
+  company: followUp.application.company?.name || null,
+  role: followUp.application.role,
+  location: followUp.application.location,
+  type: followUp.type,
+  sequence: followUp.sequence,
+  scheduledAt: followUp.scheduledAt,
+  executedAt: followUp.executedAt,
+  status: followUp.status,
+  applicationStatus: followUp.application.status,
+  appliedAt: followUp.application.appliedAt,
+  message: getFollowUpMessage(followUp.type, followUp.sequence),
+});
+
 export const getEndOfTomorrow = (now) => {
   const end = new Date(now);
   end.setDate(end.getDate() + 1);
@@ -75,6 +131,11 @@ export const getEndOfTomorrow = (now) => {
 };
 
 export class FollowUpService {
+  static async getAllFollowUps(userId) {
+    const followUps = await findAllByUser(userId);
+    return filterApplicationCheckFollowUps(followUps).map(toFollowUpResponse);
+  }
+
   static async getApplicationFollowUps(applicationId, userId) {
     const followUps = await findByApplication(applicationId, userId);
     return followUps.map(withFollowUpMessage);
