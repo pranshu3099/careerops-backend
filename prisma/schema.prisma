@@ -141,15 +141,39 @@ model Interview {
   id              String   @id @default(uuid())
   applicationId   String
 
-  round           String
+  round           Int
+  roundName       String?
+  type            InterviewType
   interviewer     String?
   scheduledAt     DateTime
+  status          InterviewStatus @default(SCHEDULED)
   feedback        String?
   result          InterviewResult?
 
   application     JobApplication @relation(fields: [applicationId], references: [id])
 
   createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([applicationId, scheduledAt])
+  @@index([status])
+}
+
+enum InterviewType {
+  DSA
+  TECHNICAL
+  SYSTEM_DESIGN
+  HR
+  MANAGERIAL
+  BEHAVIORAL
+  TAKE_HOME
+  OTHER
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
 }
 
 enum InterviewResult {
@@ -241,5 +265,4 @@ model EmailVerificationToken {
 
   @@index([userId])
 }
-
 
