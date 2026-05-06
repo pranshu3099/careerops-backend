@@ -4,6 +4,19 @@ import { FollowUpService } from "./followup.service.js";
 const getAuthUserId = (req) => req?.user?.userId || req?.user?.id;
 
 export class FollowUpController {
+  static async getAllFollowUps(req, res) {
+    try {
+      const userId = getAuthUserId(req);
+      const data = await FollowUpService.getAllFollowUps(userId);
+
+      return res.status(HTTP_STATUS.OK).json(data);
+    } catch (e) {
+      return res
+        .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
+        .json({ message: e.message });
+    }
+  }
+
   static async getApplicationFollowUps(req, res) {
     try {
       const userId = getAuthUserId(req);
