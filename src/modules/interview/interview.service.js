@@ -39,6 +39,36 @@ const toUserInterviewResponse = (interview) => ({
 const trimIfString = (value) =>
   typeof value === "string" ? value.trim() : value;
 
+const getNextInterviewRound = (interviews) => {
+  if (interviews.some((interview) => interview.status === "SCHEDULED")) {
+    throw new Error(
+      "Complete or cancel the scheduled interview before adding another round",
+    );
+  }
+
+  const nonCancelledRounds = interviews
+    .filter((interview) => interview.status !== "CANCELLED")
+    .sort((a, b) => a.round - b.round);
+
+  if (nonCancelledRounds.length === 0) return 1;
+
+  const latestnonCancelledRounds = nonCancelledRounds[nonCancelledRounds.length - 1];
+  if (
+    latestnonCancelledRounds.status !== "COMPLETED" ||
+    latestnonCancelledRounds.result !== "PASSED"
+  ) {
+    throw new Error(
+      "Next round can only be added after passing the current round",
+    );
+  }
+
+  let nextRound = 1;
+  const usedRounds = new Set(nonCancelledRounds.map((interview) => interview.round));
+  while (usedRounds.has(nextRound)) nextRound++;
+
+  return nextRound;
+};
+
 const removeQueuedFollowUps = async (followUps) => {
   const results = await Promise.allSettled(
     followUps.map((followUp) =>
@@ -79,11 +109,14 @@ export class InterviewService {
       throw new Error("Invalid scheduledAt");
     }
 
+    const interviews = await findByApplication(application.id, userId);
+    const nextRound = getNextInterviewRound(interviews);
+
     const interview = await createInterviewInRepo({
       application,
       interviewData: {
         applicationId: application.id,
-        round: data.round,
+        round: nextRound,
         roundName: trimIfString(data.roundName),
         type: data.type,
         interviewer: trimIfString(data.interviewer),
@@ -107,13 +140,12 @@ export class InterviewService {
   static async updateInterview(id, userId, data) {
     const interview = await findByIdForUser(id, userId);
     if (!interview) throw new Error("Interview not found");
-    if (interview.status === "CANCELLED" && data.scheduledAt !== undefined) {
-      throw new Error("Cancelled interviews cannot be rescheduled");
+    if (interview.status !== "SCHEDULED") {
+      throw new Error("Only scheduled interviews can be updated");
     }
 
     const updateData = {};
 
-    if (data.round !== undefined) updateData.round = data.round;
     if (data.roundName !== undefined) {
       updateData.roundName = trimIfString(data.roundName);
     }
@@ -123,12 +155,6 @@ export class InterviewService {
     }
     if (data.feedback !== undefined) {
       updateData.feedback = trimIfString(data.feedback);
-    }
-    if (data.status !== undefined) {
-      updateData.status = data.status;
-      if (data.status === "CANCELLED") {
-        updateData.result = null;
-      }
     }
     if (data.scheduledAt !== undefined) {
       const scheduledAt = new Date(data.scheduledAt);
@@ -146,12 +172,36 @@ export class InterviewService {
     };
   }
 
+  static async cancelInterview(id, userId) {
+    const interview = await findByIdForUser(id, userId);
+    if (!interview) throw new Error("Interview not found");
+    if (interview.status !== "SCHEDULED") {
+      throw new Error("Only scheduled interviews can be cancelled");
+    }
+
+    const updated = await updateInterviewById(id, {
+      status: "CANCELLED",
+      result: null,
+    });
+
+    return {
+      success: true,
+      interview: toInterviewResponse(updated),
+    };
+  }
+
   static async updateInterviewResult(id, userId, data) {
     const interview = await findByIdForUser(id, userId);
     if (!interview) throw new Error("Interview not found");
     if (interview.status === "CANCELLED") {
       throw new Error("Cancelled interviews cannot be updated with a result");
     }
+    if (interview.status !== "SCHEDULED") {
+      throw new Error("Only scheduled interviews can be completed");
+    }
+
+    const nextStatus = data.result === "PENDING" ? "SCHEDULED" : "COMPLETED";
+
 
     const { updatedInterview, cancelledFollowUps } =
       await updateInterviewResultInRepo({
@@ -159,7 +209,7 @@ export class InterviewService {
         data: {
           result: data.result,
           feedback: trimIfString(data.feedback),
-          status: "COMPLETED",
+          status: nextStatus,
         },
       });
 
