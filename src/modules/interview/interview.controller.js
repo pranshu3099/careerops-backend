@@ -57,6 +57,17 @@ export class InterviewController {
     }
   }
 
+  static async cancelInterview(req, res) {
+    try {
+      const userId = getAuthUserId(req);
+      const data = await InterviewService.cancelInterview(req.params.id, userId);
+
+      return res.status(HTTP_STATUS.OK).json(data);
+    } catch (e) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ message: e.message });
+    }
+  }
+
   static async updateInterviewResult(req, res) {
     try {
       const userId = getAuthUserId(req);
