@@ -11,7 +11,6 @@ const interviewTypes = [
   "OTHER",
 ];
 
-const interviewStatuses = ["SCHEDULED", "COMPLETED", "CANCELLED"];
 const interviewResults = ["PASSED", "FAILED", "PENDING"];
 
 const optionalTrimmedString = z
@@ -29,7 +28,11 @@ const dateString = (message) =>
 export const createInterviewSchema = z
   .object({
     applicationId: z.string().uuid("Application ID must be a valid UUID"),
-    round: z.number().int().positive("Round must be a positive number"),
+    round: z
+      .number()
+      .int()
+      .positive("Round must be a positive number")
+      .optional(),
     roundName: optionalTrimmedString,
     type: z.enum(interviewTypes),
     interviewer: optionalTrimmedString,
@@ -39,12 +42,10 @@ export const createInterviewSchema = z
 
 export const updateInterviewSchema = z
   .object({
-    round: z.number().int().positive("Round must be a positive number").optional(),
     roundName: optionalTrimmedString,
     type: z.enum(interviewTypes).optional(),
     interviewer: optionalTrimmedString,
     scheduledAt: dateString("Scheduled date must be a valid date").optional(),
-    status: z.enum(interviewStatuses).optional(),
     feedback: optionalTrimmedString,
   })
   .strict()
