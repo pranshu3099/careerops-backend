@@ -18,6 +18,7 @@ export function isValidTransition(oldStatus, newStatus) {
     APPLIED: ["SHORTLISTED", "REJECTED"],
     SHORTLISTED: ["INTERVIEWING"],
     INTERVIEWING: ["OFFERED", "REJECTED"],
+    OFFERED: ["ACCEPTED", "OFFER_DECLINED"],
   };
 
   return allowed[oldStatus]?.includes(newStatus);
