@@ -5,13 +5,35 @@ import { PrismaClient } from "@prisma/client";
 import { generateRefreshToken, hashToken } from "../../utils/jwt.utils.js";
 import EmailVerificationScheduler from "../../scheduler/emailverification.scheduler.js";
 const prisma = new PrismaClient();
+const REFRESH_TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const authCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+};
+
 export class AuthController {
-  static googleCallback(req, res) {
+  static async googleCallback(req, res) {
     try {
       const token = AuthService.generateAuthToken(req?.user);
+      const refreshToken = generateRefreshToken();
+      const hashedRefreshToken = hashToken(refreshToken);
+
+      await prisma.refreshToken.create({
+        data: {
+          token: hashedRefreshToken,
+          userId: req.user.id,
+          expiresAt: new Date(Date.now() + REFRESH_TOKEN_MAX_AGE_MS),
+        },
+      });
+
       res.cookie("access_token", token, {
-        httpOnly: true,
-        sameSite: "strict",
+        ...authCookieOptions,
+        maxAge: REFRESH_TOKEN_MAX_AGE_MS,
+      });
+      res.cookie("refreshToken", refreshToken, {
+        ...authCookieOptions,
+        maxAge: REFRESH_TOKEN_MAX_AGE_MS,
       });
       return res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
     } catch (error) {
@@ -112,10 +134,8 @@ export class AuthController {
         },
       });
       res.cookie("refreshToken", refreshToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "strict",
-        maxAge: 7 * 24 * 60 * 60 * 1000,
+        ...authCookieOptions,
+        maxAge: REFRESH_TOKEN_MAX_AGE_MS,
       });
 
       return res.status(HTTP_STATUS.OK).json({
@@ -198,9 +218,13 @@ export class AuthController {
 
     const accessToken = AuthService.generateAuthToken(user);
     res.cookie("refreshToken", newRefreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "strict",
+      ...authCookieOptions,
+      maxAge: REFRESH_TOKEN_MAX_AGE_MS,
+    });
+
+    res.cookie("access_token", accessToken, {
+      ...authCookieOptions,
+      maxAge: REFRESH_TOKEN_MAX_AGE_MS,
     });
 
     return res.json({ accessToken });
@@ -216,7 +240,8 @@ export class AuthController {
         data: { revoked: true },
       });
     }
-    res.clearCookie("refreshToken");
+    res.clearCookie("refreshToken", authCookieOptions);
+    res.clearCookie("access_token", authCookieOptions);
     return res
       .status(HTTP_STATUS.OK)
       .json({ message: "Logged out successfully", success: true });
