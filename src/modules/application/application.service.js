@@ -17,6 +17,13 @@ import FollowUpEmailScheduler from "../../scheduler/followupemail.scheduler.js";
 const prisma = new PrismaClient();
 const INITIAL_GHOST_CHECK_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const NON_EDITABLE_APPLICATION_STATUSES = [
+  "OFFERED",
+  "ACCEPTED",
+  "OFFER_DECLINED",
+  "REJECTED",
+  "GHOSTED",
+];
 
 const withFollowUpMessage = (followUp) =>
   followUp
@@ -45,6 +52,8 @@ const getValidPendingFollowUpTypesForStatus = (status) => {
       ];
     case "OFFERED":
       return [FOLLOWUPTYPE.OFFER_FOLLOWUP, FOLLOWUPTYPE.GENERAL_STATUS_CHECK];
+    case "ACCEPTED":
+    case "OFFER_DECLINED":
     case "REJECTED":
     case "GHOSTED":
     default:
@@ -52,20 +61,32 @@ const getValidPendingFollowUpTypesForStatus = (status) => {
   }
 };
 
-const cancelInvalidPendingFollowUps = (tx, applicationId, status) => {
+const getInvalidPendingFollowUpWhere = (applicationId, status) => {
   const validTypes = getValidPendingFollowUpTypesForStatus(status);
 
-  return tx.followUp.updateMany({
-    where: {
-      applicationId,
-      status: "PENDING",
-      executedAt: null,
-      ...(validTypes.length ? { type: { notIn: validTypes } } : {}),
-    },
+  return {
+    applicationId,
+    status: "PENDING",
+    executedAt: null,
+    ...(validTypes.length ? { type: { notIn: validTypes } } : {}),
+  };
+};
+
+const cancelInvalidPendingFollowUps = async (tx, applicationId, status) => {
+  const where = getInvalidPendingFollowUpWhere(applicationId, status);
+  const followUpsToCancel = await tx.followUp.findMany({
+    where,
+    select: { id: true },
+  });
+
+  await tx.followUp.updateMany({
+    where,
     data: {
       status: "CANCELLED",
     },
   });
+
+  return followUpsToCancel;
 };
 
 const isSameTime = (a, b) => a?.getTime() === b?.getTime();
@@ -100,7 +121,7 @@ export class ApplicationService {
         userId,
         companyId: companyRecord.id,
         role,
-        isDeleted:false
+        isDeleted: false,
       },
     });
 
@@ -256,28 +277,50 @@ export class ApplicationService {
       updateData.ghostedAt = new Date();
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
-      const updatedApplication = await tx.jobApplication.update({
-        where: { id: applicationId },
-        data: updateData,
-      });
+    const { updatedApplication, cancelledFollowUps } =
+      await prisma.$transaction(async (tx) => {
+        const updatedApplication = await tx.jobApplication.update({
+          where: { id: applicationId },
+          data: updateData,
+        });
 
-      await cancelInvalidPendingFollowUps(tx, applicationId, newStatus);
-
-      await tx.eventLog.create({
-        data: {
-          userId,
+        const cancelledFollowUps = await cancelInvalidPendingFollowUps(
+          tx,
           applicationId,
-          type: "STATUS_UPDATED",
-          payload: {
-            from: app.status,
-            to: newStatus,
+          newStatus,
+        );
+
+        await tx.eventLog.create({
+          data: {
+            userId,
+            applicationId,
+            type: "STATUS_UPDATED",
+            payload: {
+              from: app.status,
+              to: newStatus,
+            },
           },
-        },
+        });
+
+        return { updatedApplication, cancelledFollowUps };
       });
 
-      return updatedApplication;
+    const queueResults = await Promise.allSettled(
+      cancelledFollowUps.map((followUp) =>
+        FollowUpEmailScheduler.removeFollowUpJob(followUp.id),
+      ),
+    );
+
+    queueResults.forEach((result, index) => {
+      if (result.status === "rejected") {
+        console.error(
+          `Failed to remove followup job ${cancelledFollowUps[index].id}: ${result.reason?.message}`,
+        );
+      }
     });
+
+    const updated = updatedApplication;
+    updated.cancelledFollowUps = cancelledFollowUps.length;
 
     const followUpType = FOLLOWUP_TYPE_BY_STATUS[newStatus];
     if (followUpType) {
@@ -337,7 +380,7 @@ export class ApplicationService {
     });
 
     if (!application) throw new Error("Application not found");
-    if (["REJECTED", "OFFERED", "GHOSTED"].includes(application.status)) {
+    if (NON_EDITABLE_APPLICATION_STATUSES.includes(application.status)) {
       throw new Error("Application cannot be edited after it is closed");
     }
 
