@@ -54,6 +54,8 @@ Supported application statuses:
 - Shortlisted
 - Interviewing
 - Offered
+- Accepted
+- Offer Declined
 - Rejected
 - Ghosted
 
@@ -62,6 +64,15 @@ The system prevents duplicate active applications for the same user, company, an
 ### Status Lifecycle Management
 
 CareerOps enforces controlled application status transitions. When an application status changes, the system records the update, stores the latest response timestamp, cancels follow-ups that no longer match the current status, and schedules the next relevant follow-up when applicable.
+
+Current primary transitions:
+
+- Applied to Shortlisted or Rejected.
+- Shortlisted to Interviewing.
+- Interviewing to Offered or Rejected.
+- Offered to Accepted or Offer Declined.
+
+Accepted, Offer Declined, Rejected, and Ghosted are treated as closed outcomes for follow-up and ghost-check behavior. Offered remains non-editable, but it can still be moved to Accepted or Offer Declined.
 
 Status updates are also written to the event log for historical traceability.
 
@@ -82,7 +93,9 @@ Additional stage-specific follow-ups are created when an application moves forwa
 - Offer follow-up after offer stage.
 - General status checks where applicable.
 
-Follow-ups are stored in the database and scheduled through Redis-backed BullMQ queues. Before sending an email, the worker validates that the follow-up is still relevant. For example, a follow-up is cancelled if the application has been rejected, ghosted, deleted, or moved to a status where that follow-up type no longer applies.
+Follow-ups are stored in the database and scheduled through Redis-backed BullMQ queues. Before sending an email, the worker validates that the follow-up is still relevant. For example, a follow-up is cancelled if the application has been accepted, offer declined, rejected, ghosted, deleted, or moved to a status where that follow-up type no longer applies.
+
+When an application moves to Accepted or Offer Declined, all pending and unexecuted follow-ups for that application are cancelled in the database and removed from the queue where possible.
 
 ### Follow-Up Alerts
 
@@ -114,9 +127,10 @@ Users can:
 
 - View all interviews across their applications.
 - Create interviews for applications in the interviewing stage.
-- Track interview round number and optional round name.
+- Track backend-assigned interview round number and optional round name.
 - Record interview type, interviewer, and scheduled date.
-- Update interview status, feedback, and schedule.
+- Update scheduled interview details, feedback, and schedule.
+- Cancel scheduled interviews.
 - Record interview results.
 
 Supported interview types:
@@ -142,6 +156,16 @@ Supported interview results:
 - Failed
 - Pending
 
+Interview round numbers are owned by the backend. The frontend should not send or edit the round number. The first interview is round 1. If a round is cancelled, the next created interview can reuse that round number. If the latest completed round is passed, the next interview advances to the next round. A new round cannot be created while another interview is still scheduled.
+
+Interview status changes are controlled through dedicated actions:
+
+- Creating an interview creates it as Scheduled.
+- Updating interview details is only allowed while the interview is Scheduled.
+- Cancelling an interview is only allowed while the interview is Scheduled and clears any result.
+- Recording Passed or Failed completes the interview.
+- Recording Pending keeps the round open until a final result is recorded.
+
 When an interview result is marked as failed, the related application is treated as rejected by the interview workflow. Any follow-ups that are no longer valid are cancelled and removed from the queue when possible.
 
 ### Ghosting Detection
@@ -157,8 +181,7 @@ The ghost scoring service evaluates factors such as:
 
 The confidence score is a number between 0 and 1 that represents how likely an application is to be ghosted. CareerOps calculates it from signals such as time since applying, whether the user has received a response, time since the latest response, and the current application status. A higher score means the application appears more stale, so the system checks it more frequently and may eventually mark it as ghosted.
 
-
-The score is capped between 0 and 1. Applications with high scores are marked as ghosted when the confidence threshold is reached. Ghost detection jobs also reschedule future checks dynamically:
+The score is capped between 0 and 1. Applications in terminal or closed stages such as Offered, Accepted, Offer Declined, Rejected, and Ghosted are skipped by ghost detection. Applications with high scores are marked as ghosted when the confidence threshold is reached. Ghost detection jobs also reschedule future checks dynamically:
 
 - High confidence applications are checked more frequently.
 - Medium confidence applications are checked periodically.
@@ -168,7 +191,7 @@ When an application is detected as ghosted, the system updates the application s
 
 ### Analytics and Statistics
 
-CareerOps exposes application statistics for authenticated users. The data model also supports analytics snapshots that can store daily totals for applied jobs, interviews, offers, and ghosted applications.
+CareerOps exposes application statistics for authenticated users. Current statistics include counts for applied, shortlisted, interviewing, offered, accepted, offer declined, rejected, and ghosted applications. The data model also supports analytics snapshots that can store daily totals for applied jobs, interviews, offers, and ghosted applications.
 
 Current product statistics are designed to help users understand their job search pipeline at a glance.
 
@@ -233,7 +256,8 @@ The backend exposes REST-style endpoints grouped by product domain.
 | GET | `/interviews` | List all interviews for the authenticated user. |
 | POST | `/interviews` | Create an interview for an interviewing application. |
 | GET | `/interviews/application/:applicationId` | List interviews for a specific application. |
-| PATCH | `/interviews/:id` | Update interview details, status, schedule, or feedback. |
+| PATCH | `/interviews/:id` | Update scheduled interview details, schedule, or feedback. |
+| PATCH | `/interviews/:id/cancel` | Cancel a scheduled interview and clear its result. |
 | PATCH | `/interviews/:id/result` | Mark interview result and complete the interview. |
 
 ### Settings
