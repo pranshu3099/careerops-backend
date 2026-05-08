@@ -67,6 +67,8 @@ export const getStats = async (userId) => {
     shortlisted: 0,
     interviewing: 0,
     offered: 0,
+    accepted: 0,
+    offerDeclined: 0,
     rejected: 0,
     ghosted: 0,
   };
@@ -78,11 +80,12 @@ export const getStats = async (userId) => {
     if (item.status === "SHORTLISTED") stats.shortlisted = count;
     if (item.status === "INTERVIEWING") stats.interviewing = count;
     if (item.status === "OFFERED") stats.offered = count;
+    if (item.status === "ACCEPTED") stats.accepted = count;
+    if (item.status === "OFFER_DECLINED") stats.offerDeclined = count;
     if (item.status === "REJECTED") stats.rejected = count;
     if (item.status === "GHOSTED") stats.ghosted = count;
   });
 
   return stats;
 };
-
 
