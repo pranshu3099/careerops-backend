@@ -5,6 +5,12 @@ import redisConnection from "../config/redis.js";
 import { sendFollowUpEmail } from "../utils/followupmailer.js";
 import { FOLLOWUPTYPE } from "../constants/followup.js";
 const prisma = new PrismaClient();
+const TERMINAL_APPLICATION_STATUSES = [
+  "ACCEPTED",
+  "OFFER_DECLINED",
+  "REJECTED",
+  "GHOSTED",
+];
 
 const getLatestActiveInterview = (interviews = []) =>
   interviews
@@ -34,7 +40,7 @@ const isFollowUpStillValid = (followUp) => {
     case FOLLOWUPTYPE.OFFER_FOLLOWUP:
       return app.status === "OFFERED";
     case FOLLOWUPTYPE.GENERAL_STATUS_CHECK:
-      return !["REJECTED", "GHOSTED"].includes(app.status);
+      return !TERMINAL_APPLICATION_STATUSES.includes(app.status);
     case FOLLOWUPTYPE.APPLICATION_CHECK:
     default:
       return app.status === "APPLIED" && !app.lastResponseAt;
