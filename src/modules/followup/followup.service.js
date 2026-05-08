@@ -5,8 +5,14 @@ import {
   findDueSoonByUser,
   findUpcomingByUser,
 } from "./followup.repo.js";
+import { getOrCreateSettings } from "../settings/settings.repo.js";
 
-const DUE_SOON_WINDOW_MS = 24 * 60 * 60 * 1000;
+const TERMINAL_APPLICATION_STATUSES = [
+  "ACCEPTED",
+  "OFFER_DECLINED",
+  "REJECTED",
+  "GHOSTED",
+];
 
 const withFollowUpMessage = (followUp) =>
   followUp
@@ -44,7 +50,7 @@ const isUpcomingFollowUpValid = (followUp) => {
     case FOLLOWUPTYPE.OFFER_FOLLOWUP:
       return application.status === "OFFERED";
     case FOLLOWUPTYPE.GENERAL_STATUS_CHECK:
-      return !["REJECTED", "GHOSTED"].includes(application.status);
+      return !TERMINAL_APPLICATION_STATUSES.includes(application.status);
     default:
       return false;
   }
@@ -130,6 +136,19 @@ export const getEndOfTomorrow = (now) => {
   return end;
 };
 
+export const getAlertWindowEnd = (now, alertDays) => {
+  if (alertDays <= 0) {
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+    return end;
+  }
+
+  const end = new Date(now);
+  end.setDate(end.getDate() + alertDays);
+  end.setHours(23, 59, 59, 999);
+  return end;
+};
+
 export class FollowUpService {
   static async getAllFollowUps(userId) {
     const followUps = await findAllByUser(userId);
@@ -159,7 +178,10 @@ export class FollowUpService {
   }
 
   static async getDueSoonFollowUps(userId, now = new Date()) {
-    const windowEnd = getEndOfTomorrow(now);
+    const settings = await getOrCreateSettings(userId);
+    if (!settings.followUpAlertsEnabled) return [];
+
+    const windowEnd = getAlertWindowEnd(now, settings.followUpAlertDays);
     const followUps = await findDueSoonByUser(userId, now, windowEnd);
 
     return followUps
