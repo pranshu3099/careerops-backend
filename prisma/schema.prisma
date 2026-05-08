@@ -33,6 +33,7 @@ model User {
   AnalyticsSnapshot AnalyticsSnapshot[]
   refreshTokens     RefreshToken[]
   emailVerificationTokens EmailVerificationToken[]
+  settings          UserSettings?
 
 }
 
@@ -92,6 +93,8 @@ enum ApplicationStatus {
   SHORTLISTED
   INTERVIEWING
   OFFERED
+  ACCEPTED
+  OFFER_DECLINED
   REJECTED
   GHOSTED
 }
@@ -266,3 +269,14 @@ model EmailVerificationToken {
   @@index([userId])
 }
 
+model UserSettings {
+  id                    String  @id @default(uuid())
+  userId                String  @unique
+  followUpAlertsEnabled Boolean @default(true)
+  followUpAlertDays     Int     @default(1)
+
+  user                  User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
