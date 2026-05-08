@@ -26,18 +26,20 @@ router.get(
   InterviewController.getApplicationInterviews,
 );
 
-router.patch(
-  "/:id",
-  authenticate,
-  validateRequest(updateInterviewSchema),
-  InterviewController.updateInterview,
-);
+router.patch("/:id/cancel", authenticate, InterviewController.cancelInterview);
 
 router.patch(
   "/:id/result",
   authenticate,
   validateRequest(updateInterviewResultSchema),
   InterviewController.updateInterviewResult,
+);
+
+router.patch(
+  "/:id",
+  authenticate,
+  validateRequest(updateInterviewSchema),
+  InterviewController.updateInterview,
 );
 
 export default router;
