@@ -8,15 +8,18 @@ export function calculateGhostScore(app){
 
   let score = 0
 
-  if (['REJECTED', 'OFFERED'].includes(app.status)) {
+  if (
+    ['ACCEPTED', 'OFFER_DECLINED', 'REJECTED', 'OFFERED', 'GHOSTED'].includes(
+      app.status,
+    )
+  ) {
     return 0
   }
 
-  if (daysSinceApply > 7) score += 0.3
-  if (daysSinceApply > 14) score += 0.4
-  if (daysSinceApply > 21) score += 0.3
-
   if (!app.lastResponseAt) {
+    if (daysSinceApply > 7) score += 0.3
+    if (daysSinceApply > 14) score += 0.4
+    if (daysSinceApply > 21) score += 0.3
     score += 0.3
   } else {
     const daysSinceResponse = diffInDays(now, app.lastResponseAt)
