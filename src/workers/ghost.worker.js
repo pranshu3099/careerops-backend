@@ -6,6 +6,13 @@ import { getNextCheckDelay } from "../services/ghostScheduler.service.js";
 import { ghostQueue } from "../queues/ghost.queue.js";
 import { followupQueue } from "../queues/followup.queue.js";
 const prisma = new PrismaClient();
+const TERMINAL_APPLICATION_STATUSES = [
+  "ACCEPTED",
+  "OFFER_DECLINED",
+  "REJECTED",
+  "OFFERED",
+  "GHOSTED",
+];
 
 const createGhostJobId = (applicationId, delayMs) =>
   `ghost-${applicationId}-${Date.now() + delayMs}`;
@@ -21,7 +28,7 @@ export const ghostWorker = new Worker(
 
     if (!app || app.isDeleted) return;
 
-    if (["REJECTED", "OFFERED"].includes(app.status)) return;
+    if (TERMINAL_APPLICATION_STATUSES.includes(app.status)) return;
 
     const score = calculateGhostScore(app);
 
