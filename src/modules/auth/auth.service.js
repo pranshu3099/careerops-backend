@@ -11,10 +11,35 @@ export class AuthService {
   static async handleGoogleLogin(profile) {
     try {
       const googleId = profile?.id;
-      const email = profile?.emails[0]?.value;
+      const email = profile?.emails?.[0]?.value;
+      const avatar = profile?.photos?.[0]?.value;
+
+      if (!googleId || !email) {
+        throw new Error("Invalid Google profile");
+      }
+
       let user = await prisma.user.findUnique({
         where: { oauthId: googleId },
       });
+
+      if (user) return user;
+
+      user = await prisma.user.findUnique({
+        where: { email },
+      });
+
+      if (user) {
+        return prisma.user.update({
+          where: { id: user.id },
+          data: {
+            oauthId: googleId,
+            name: user.name || profile.displayName,
+            avatar: user.avatar || avatar,
+            provider: "GOOGLE",
+            isUserVerified: true,
+          },
+        });
+      }
 
       if (!user) {
         user = await prisma.user.create({
@@ -22,8 +47,9 @@ export class AuthService {
             oauthId: googleId,
             email,
             name: profile.displayName,
-            avatar: profile.photos[0].value,
+            avatar,
             provider: "GOOGLE",
+            isUserVerified: true,
           },
         });
       }
