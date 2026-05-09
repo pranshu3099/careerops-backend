@@ -2,33 +2,15 @@ import { ApplicationService } from "./application.service.js";
 import { HTTP_STATUS } from "../../constants/httpStatus.js";
 import { getUser } from "../../utils/helper.js";
 import FollowUpEmailScheduler from "../../scheduler/followupemail.scheduler.js";
-import { ghostQueue } from "../../queues/ghost.queue.js";
+import {
+  enqueueGhostCheck,
+  removeQueuedGhostChecks,
+  TERMINAL_GHOST_APPLICATION_STATUSES,
+} from "../../services/ghostQueue.service.js";
 
 const getAuthUserId = (req) => req?.user?.userId || req?.user?.id;
 const INITIAL_GHOST_CHECK_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
 const STATUS_GHOST_CHECK_DELAY_MS = 3 * 24 * 60 * 60 * 1000;
-
-const createGhostJobId = (applicationId, delayMs) =>
-  `ghost-${applicationId}-${Date.now() + delayMs}`;
-
-const enqueueGhostCheck = async (data, delayMs) => {
-  try {
-    await ghostQueue.add("check-ghost", data, {
-      delay: delayMs,
-      jobId: createGhostJobId(data.applicationId, delayMs),
-      removeOnComplete: true,
-      attempts: 3,
-      backoff: {
-        type: "exponential",
-        delay: 5000,
-      },
-    });
-  } catch (err) {
-    console.error(
-      `Failed to enqueue ghost check for application ${data.applicationId}: ${err.message}`,
-    );
-  }
-};
 
 const enqueueFollowUpJobs = async (followUps, jobData) => {
   const results = await Promise.allSettled(
@@ -138,10 +120,14 @@ export class ApplicationController {
         status,
       );
 
-      await enqueueGhostCheck(
-        { applicationId: updated?.id },
-        STATUS_GHOST_CHECK_DELAY_MS,
-      );
+      if (TERMINAL_GHOST_APPLICATION_STATUSES.includes(updated.status)) {
+        await removeQueuedGhostChecks(updated.id);
+      } else {
+        await enqueueGhostCheck(
+          { applicationId: updated?.id },
+          STATUS_GHOST_CHECK_DELAY_MS,
+        );
+      }
 
       return res.json({
         success: true,
