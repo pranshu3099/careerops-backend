@@ -3,19 +3,13 @@ import { Worker } from "bullmq";
 import redisConnection from "../config/redis.js";
 import { calculateGhostScore } from "../services/ghostScoring.service.js";
 import { getNextCheckDelay } from "../services/ghostScheduler.service.js";
-import { ghostQueue } from "../queues/ghost.queue.js";
+import {
+  enqueueGhostCheck,
+  removeQueuedGhostChecks,
+  TERMINAL_GHOST_APPLICATION_STATUSES,
+} from "../services/ghostQueue.service.js";
 import { followupQueue } from "../queues/followup.queue.js";
 const prisma = new PrismaClient();
-const TERMINAL_APPLICATION_STATUSES = [
-  "ACCEPTED",
-  "OFFER_DECLINED",
-  "REJECTED",
-  "OFFERED",
-  "GHOSTED",
-];
-
-const createGhostJobId = (applicationId, delayMs) =>
-  `ghost-${applicationId}-${Date.now() + delayMs}`;
 
 export const ghostWorker = new Worker(
   "ghost-detection",
@@ -26,9 +20,15 @@ export const ghostWorker = new Worker(
       where: { id: applicationId },
     });
 
-    if (!app || app.isDeleted) return;
+    if (!app || app.isDeleted) {
+      await removeQueuedGhostChecks(applicationId, { excludeJobId: job.id });
+      return;
+    }
 
-    if (TERMINAL_APPLICATION_STATUSES.includes(app.status)) return;
+    if (TERMINAL_GHOST_APPLICATION_STATUSES.includes(app.status)) {
+      await removeQueuedGhostChecks(applicationId, { excludeJobId: job.id });
+      return;
+    }
 
     const score = calculateGhostScore(app);
 
@@ -121,22 +121,12 @@ export const ghostWorker = new Worker(
           payload: { score },
         },
       });
+
+      await removeQueuedGhostChecks(applicationId, { excludeJobId: job.id });
+      return;
     }
 
-    await ghostQueue.add(
-      "check-ghost",
-      { applicationId },
-      {
-        delay,
-        jobId: createGhostJobId(applicationId, delay),
-        removeOnComplete: true,
-        attempts: 3,
-        backoff: {
-          type: "exponential",
-          delay: 5000,
-        },
-      },
-    );
+    await enqueueGhostCheck({ applicationId }, delay);
   },
   {
     connection: redisConnection,
