@@ -9,6 +9,7 @@ import followUpRoutes, {
 } from "../src/modules/followup/followup.routes.js";
 import interviewRoutes from "../src/modules/interview/interview.routes.js";
 import settingsRoutes from "../src/modules/settings/settings.routes.js";
+import analyticsRoutes from "../src/modules/analytics/analytics.routes.js";
 
 const app = express();
 app.use(
@@ -25,6 +26,7 @@ app.use("/auth", authRoutes);
 app.use("/followups", followUpRoutes);
 app.use("/interviews", interviewRoutes);
 app.use("/settings", settingsRoutes);
+app.use("/analytics", analyticsRoutes);
 app.use("/applications", legacyFollowUpRoutes);
 app.use("/applications", applicationRoutes);
 
