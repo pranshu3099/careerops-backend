@@ -26,6 +26,7 @@ model User {
 
   applications  JobApplication[]
   events        EventLog[]
+  notifications Notification[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -77,6 +78,7 @@ model JobApplication {
   interviews      Interview[]
   events          EventLog[]
   ghostDetection  GhostDetection?
+  notifications   Notification[]
 
   user            User     @relation(fields: [userId], references: [id])
   company         Company  @relation(fields: [companyId], references: [id])
@@ -118,11 +120,45 @@ model FollowUp {
   type             FollowUpType @default(APPLICATION_CHECK)
   sequence         Int?
   application      JobApplication @relation(fields: [applicationId], references: [id])
+  notifications    Notification[]
 
   createdAt        DateTime @default(now())
 
   @@index([scheduledAt])
   @@index([applicationId, type, sequence])
+}
+
+model Notification {
+  id              String   @id @default(uuid())
+  userId          String
+  applicationId   String?
+  followUpId      String?
+  interviewId     String?
+  type            NotificationType
+  title           String
+  message         String
+  data            Json?
+  sourceKey       String?  @unique
+  readAt          DateTime?
+  createdAt       DateTime @default(now())
+
+  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application     JobApplication? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  followUp        FollowUp? @relation(fields: [followUpId], references: [id], onDelete: SetNull)
+  interview       Interview? @relation(fields: [interviewId], references: [id], onDelete: SetNull)
+
+  @@index([userId, readAt])
+  @@index([applicationId])
+  @@index([followUpId])
+  @@index([interviewId])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  FOLLOW_UP_DUE
+  INTERVIEW_REMINDER
+  GHOST_STALE_WARNING
+  APPLICATION_GHOSTED
 }
 
 enum FollowUpStatus {
@@ -154,6 +190,7 @@ model Interview {
   result          InterviewResult?
 
   application     JobApplication @relation(fields: [applicationId], references: [id])
+  notifications   Notification[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
