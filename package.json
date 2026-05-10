@@ -12,6 +12,7 @@
     "worker:email": "node src/workers/email.worker.js",
     "worker:followup": "node src/workers/followup.worker.js",
     "worker:ghost": "node src/workers/ghost.worker.js",
+    "worker:notification": "node src/workers/notification.worker.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
     "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
     "test:workers": "NODE_OPTIONS=--experimental-vm-modules jest tests/workers --runInBand",
