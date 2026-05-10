@@ -1,4 +1,5 @@
 import { HTTP_STATUS } from "../../constants/httpStatus.js";
+import NotificationScheduler from "../../scheduler/notification.scheduler.js";
 import { SettingsService } from "./settings.service.js";
 
 const getAuthUserId = (req) => req?.user?.userId || req?.user?.id;
@@ -24,6 +25,7 @@ export class SettingsController {
         userId,
         req.body,
       );
+      await NotificationScheduler.scheduleUserSyncJob(userId);
 
       return res.status(HTTP_STATUS.OK).json(data);
     } catch (e) {
