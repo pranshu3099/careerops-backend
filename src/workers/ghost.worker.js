@@ -8,6 +8,7 @@ import {
   removeQueuedGhostChecks,
   TERMINAL_GHOST_APPLICATION_STATUSES,
 } from "../services/ghostQueue.service.js";
+import { NotificationService } from "../modules/notification/notification.service.js";
 import { followupQueue } from "../queues/followup.queue.js";
 const prisma = new PrismaClient();
 
@@ -18,6 +19,9 @@ export const ghostWorker = new Worker(
 
     const app = await prisma.jobApplication.findUnique({
       where: { id: applicationId },
+      include: {
+        company: true,
+      },
     });
 
     if (!app || app.isDeleted) {
@@ -57,6 +61,10 @@ export const ghostWorker = new Worker(
           removeOnFail: false,
         },
       );
+    }
+
+    if (score > 0.7) {
+      await NotificationService.createGhostWarning({ application: app, score });
     }
 
     const isGhosted = score >= 0.8;
@@ -120,6 +128,11 @@ export const ghostWorker = new Worker(
           type: "GHOST_DETECTED",
           payload: { score },
         },
+      });
+
+      await NotificationService.createApplicationGhosted({
+        application: app,
+        score,
       });
 
       await removeQueuedGhostChecks(applicationId, { excludeJobId: job.id });
