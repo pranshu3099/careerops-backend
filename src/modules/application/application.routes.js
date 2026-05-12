@@ -5,6 +5,7 @@ import authenticate from "../../middlewares/auth.middleware.js";
 import validateRequest from "../../middlewares/validateRequest.js";
 import {
   createApplicationSchema,
+  updateApplicationStatusSchema,
   updateApplicationSchema,
 } from "../../validators/application.schema.js";
 const router = Router();
@@ -18,6 +19,7 @@ router.post(
 router.patch(
   "/:id/status",
   authenticate,
+  validateRequest(updateApplicationStatusSchema),
   ApplicationController.updateStatusHandler,
 );
 
