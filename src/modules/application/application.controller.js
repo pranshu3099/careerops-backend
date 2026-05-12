@@ -1,5 +1,6 @@
 import { ApplicationService } from "./application.service.js";
 import { HTTP_STATUS } from "../../constants/httpStatus.js";
+import { AUTH_MESSAGES, COMMON_MESSAGES } from "../../constants/messages.js";
 import { getUser } from "../../utils/helper.js";
 import FollowUpEmailScheduler from "../../scheduler/followupemail.scheduler.js";
 import {
@@ -47,7 +48,7 @@ export class ApplicationController {
       if (!userId) {
         return res.status(HTTP_STATUS.UNAUTHORIZED).json({
           success: false,
-          message: "Unauthorized",
+          message: AUTH_MESSAGES.UNAUTHORIZED_REQUEST,
         });
       }
       const user = await getUser(userId);
@@ -110,7 +111,7 @@ export class ApplicationController {
       if (!userId) {
         return res.status(HTTP_STATUS.UNAUTHORIZED).json({
           success: false,
-          message: "Unauthorized",
+          message: AUTH_MESSAGES.UNAUTHORIZED_REQUEST,
         });
       }
 
@@ -149,7 +150,7 @@ export class ApplicationController {
     } catch (e) {
       return res
         .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
-        .json({ message: e.message });
+        .json({ message: COMMON_MESSAGES.INTERNAL_SERVER_ERROR });
     }
   }
 
@@ -222,7 +223,7 @@ export class ApplicationController {
     } catch (e) {
       res
         .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
-        .json({ message: e.message });
+        .json({ message: COMMON_MESSAGES.INTERNAL_SERVER_ERROR });
     }
   }
 }
