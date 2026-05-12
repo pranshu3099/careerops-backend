@@ -1,4 +1,5 @@
 import { HTTP_STATUS } from "../../constants/httpStatus.js";
+import { COMMON_MESSAGES } from "../../constants/messages.js";
 import NotificationScheduler from "../../scheduler/notification.scheduler.js";
 import { SettingsService } from "./settings.service.js";
 
@@ -14,7 +15,7 @@ export class SettingsController {
     } catch (e) {
       return res
         .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
-        .json({ message: e.message });
+        .json({ message: COMMON_MESSAGES.INTERNAL_SERVER_ERROR });
     }
   }
 
