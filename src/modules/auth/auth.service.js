@@ -96,7 +96,7 @@ export class AuthService {
       return storedToken.user;
     } catch (err) {
       console.error("AuthService.getCurrentUser:", err);
-      throw error;
+      throw err;
     }
   }
 
