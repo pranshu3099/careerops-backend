@@ -13,6 +13,7 @@ import {
   getFollowUpDelayMs,
   getFollowUpMessage,
 } from "../../constants/followup.js";
+import { AUTH_MESSAGES } from "../../constants/messages.js";
 import FollowUpEmailScheduler from "../../scheduler/followupemail.scheduler.js";
 const prisma = new PrismaClient();
 const INITIAL_GHOST_CHECK_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
@@ -261,7 +262,7 @@ export class ApplicationService {
     if (!app) throw new Error("Application not found");
 
     if (app.userId !== userId) {
-      throw new Error("Unauthorized");
+      throw new Error(AUTH_MESSAGES.UNAUTHORIZED_REQUEST);
     }
 
     if (!isValidTransition(app.status, newStatus)) {
