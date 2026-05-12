@@ -10,6 +10,16 @@ const validSources = [
   "CAREER_PAGE",
   "OTHER",
 ];
+const applicationStatuses = [
+  "APPLIED",
+  "SHORTLISTED",
+  "INTERVIEWING",
+  "OFFERED",
+  "ACCEPTED",
+  "OFFER_DECLINED",
+  "REJECTED",
+  "GHOSTED",
+];
 
 export const createApplicationSchema = z.object({
   company: z.string().trim().min(1, "Company is required"),
@@ -61,3 +71,9 @@ export const updateApplicationSchema = z
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one field is required",
   });
+
+export const updateApplicationStatusSchema = z
+  .object({
+    status: z.enum(applicationStatuses),
+  })
+  .strict();
