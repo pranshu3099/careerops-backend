@@ -1,4 +1,5 @@
 import { HTTP_STATUS } from "../../constants/httpStatus.js";
+import { COMMON_MESSAGES } from "../../constants/messages.js";
 import { AnalyticsService } from "./analytics.service.js";
 
 const getAuthUserId = (req) => req?.user?.userId || req?.user?.id;
@@ -11,7 +12,7 @@ export class AnalyticsController {
     } catch (e) {
       return res
         .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
-        .json({ message: e.message });
+        .json({ message: COMMON_MESSAGES.INTERNAL_SERVER_ERROR });
     }
   }
 
@@ -22,7 +23,7 @@ export class AnalyticsController {
     } catch (e) {
       return res
         .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
-        .json({ message: e.message });
+        .json({ message: COMMON_MESSAGES.INTERNAL_SERVER_ERROR });
     }
   }
 
@@ -36,7 +37,7 @@ export class AnalyticsController {
     } catch (e) {
       return res
         .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
-        .json({ message: e.message });
+        .json({ message: COMMON_MESSAGES.INTERNAL_SERVER_ERROR });
     }
   }
 
@@ -47,7 +48,7 @@ export class AnalyticsController {
     } catch (e) {
       return res
         .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
-        .json({ message: e.message });
+        .json({ message: COMMON_MESSAGES.INTERNAL_SERVER_ERROR });
     }
   }
 
@@ -58,7 +59,7 @@ export class AnalyticsController {
     } catch (e) {
       return res
         .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
-        .json({ message: e.message });
+        .json({ message: COMMON_MESSAGES.INTERNAL_SERVER_ERROR });
     }
   }
 
@@ -69,8 +70,7 @@ export class AnalyticsController {
     } catch (e) {
       return res
         .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
-        .json({ message: e.message });
+        .json({ message: COMMON_MESSAGES.INTERNAL_SERVER_ERROR });
     }
   }
 }
-
