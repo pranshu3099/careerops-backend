@@ -4,6 +4,11 @@ import { AUTH_MESSAGES, COMMON_MESSAGES } from "../../constants/messages.js";
 import { PrismaClient } from "@prisma/client";
 import { generateRefreshToken, hashToken } from "../../utils/jwt.utils.js";
 import EmailVerificationScheduler from "../../scheduler/emailverification.scheduler.js";
+import {
+  clearCsrfCookie,
+  createCsrfToken,
+  setCsrfCookie,
+} from "../../middlewares/csrf.middleware.js";
 const prisma = new PrismaClient();
 const REFRESH_TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const authCookieOptions = {
@@ -13,6 +18,15 @@ const authCookieOptions = {
 };
 
 export class AuthController {
+  static async csrf(req, res) {
+    const csrfToken = createCsrfToken();
+    setCsrfCookie(res, csrfToken);
+
+    return res.status(HTTP_STATUS.OK).json({
+      csrfToken,
+    });
+  }
+
   static async googleCallback(req, res) {
     try {
       const token = AuthService.generateAuthToken(req?.user);
@@ -39,7 +53,7 @@ export class AuthController {
     } catch (error) {
       return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         success: false,
-        message: `Authentication failed ${AUTH_MESSAGES.INTERNAL_SERVER_ERROR}`,
+        message: `${AUTH_MESSAGES.AUTHENTICATION_FAILED} ${COMMON_MESSAGES.INTERNAL_SERVER_ERROR}`,
       });
     }
   }
@@ -68,7 +82,7 @@ export class AuthController {
       });
     } catch (error) {
       if (error.message === AUTH_MESSAGES.EMAIL_ALREADY_EXISTS) {
-        return res.status(HTTP_STATUS.CONFLICT || 409).json({
+        return res.status(HTTP_STATUS.CONFLICT).json({
           success: false,
           message: AUTH_MESSAGES.EMAIL_ALREADY_EXISTS,
         });
@@ -86,7 +100,7 @@ export class AuthController {
     if (!token) {
       return res
         .status(HTTP_STATUS.BAD_REQUEST)
-        .json({ message: "Invalid verification link" });
+        .json({ message: COMMON_MESSAGES.INVALID_VERIFICATION_LINK });
     }
 
     const storedToken = await prisma.emailVerificationToken.findUnique({
@@ -96,7 +110,9 @@ export class AuthController {
     if (!storedToken || storedToken.expiresAt < new Date()) {
       return res
         .status(HTTP_STATUS.BAD_REQUEST)
-        .json({ message: "Link expired or invalid" });
+        .json({
+          message: COMMON_MESSAGES.VERIFICATION_LINK_EXPIRED_OR_INVALID,
+        });
     }
 
     await prisma.user.update({
@@ -117,7 +133,7 @@ export class AuthController {
       const user = await AuthService.userLogin(req?.body);
       if (!user?.isUserVerified) {
         return res.status(HTTP_STATUS.UNAUTHORIZED).json({
-          message: "Your email address has not been verified yet.",
+          message: AUTH_MESSAGES.UNVERIFIED_EMAIL,
         });
       }
       const accessToken = AuthService.generateAuthToken({
@@ -140,7 +156,7 @@ export class AuthController {
 
       return res.status(HTTP_STATUS.OK).json({
         success: true,
-        message: "Login successful",
+        message: AUTH_MESSAGES.LOGIN_SUCCESS,
         data: {
           accessToken,
           user: {
@@ -172,7 +188,7 @@ export class AuthController {
     if (!token) {
       return res
         .status(HTTP_STATUS.UNAUTHORIZED)
-        .json({ message: "unauthorized" });
+        .json({ message: AUTH_MESSAGES.UNAUTHORIZED_REQUEST });
     }
 
     const hashedToken = hashToken(token);
@@ -186,7 +202,7 @@ export class AuthController {
     if (!storedToken) {
       return res
         .status(HTTP_STATUS.UNAUTHORIZED)
-        .json({ message: "Token reuse detected" });
+        .json({ message: AUTH_MESSAGES.TOKEN_REUSE_DETECTED });
     }
     // rotation for refresh token
 
@@ -213,7 +229,7 @@ export class AuthController {
     if (!user) {
       return res
         .status(HTTP_STATUS.UNAUTHORIZED)
-        .json({ message: "Unauthorized" });
+        .json({ message: AUTH_MESSAGES.UNAUTHORIZED_REQUEST });
     }
 
     const accessToken = AuthService.generateAuthToken(user);
@@ -242,9 +258,10 @@ export class AuthController {
     }
     res.clearCookie("refreshToken", authCookieOptions);
     res.clearCookie("access_token", authCookieOptions);
+    clearCsrfCookie(res);
     return res
       .status(HTTP_STATUS.OK)
-      .json({ message: "Logged out successfully", success: true });
+      .json({ message: AUTH_MESSAGES.LOGOUT_SUCCESS, success: true });
   }
 
   static async me(req, res) {
@@ -265,7 +282,7 @@ export class AuthController {
     } catch (error) {
       return res.status(HTTP_STATUS.UNAUTHORIZED).json({
         success: false,
-        message: AUTH_MESSAGES.UNAUTHORIZED || "Unauthorized",
+        message: AUTH_MESSAGES.UNAUTHORIZED,
       });
     }
   }
