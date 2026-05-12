@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { HTTP_STATUS } from "../constants/httpStatus.js";
+import { AUTH_MESSAGES } from "../constants/messages.js";
 
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -9,7 +10,7 @@ const authenticate = (req, res, next) => {
 
   if (!token) {
     return res.status(HTTP_STATUS.UNAUTHORIZED).json({
-      message: "Unauthorized",
+      message: AUTH_MESSAGES.UNAUTHORIZED_REQUEST,
     });
   }
 
@@ -21,7 +22,7 @@ const authenticate = (req, res, next) => {
     next();
   } catch (err) {
     return res.status(HTTP_STATUS.UNAUTHORIZED).json({
-      message: "Token expired or invalid",
+      message: AUTH_MESSAGES.TOKEN_EXPIRED_OR_INVALID,
     });
   }
 };
