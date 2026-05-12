@@ -1,8 +1,10 @@
 import jwt from "jsonwebtoken";
 import crypto from "crypto"
+const ACCESS_TOKEN_EXPIRES_IN = process.env.ACCESS_TOKEN_EXPIRES_IN || "15m";
+
 export const generateToken = (payload) => {
 return jwt.sign(payload, process.env.JWT_SECRET, {
-    expiresIn:"7d"
+    expiresIn: ACCESS_TOKEN_EXPIRES_IN,
 })
 }
 
