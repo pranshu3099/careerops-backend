@@ -15,6 +15,7 @@ import notificationRoutes from "../src/modules/notification/notification.routes.
 import { originCheck } from "./middlewares/csrf.middleware.js";
 
 const app = express();
+app.set("trust proxy", 1);
 app.use(helmet());
 app.use(
   cors({
