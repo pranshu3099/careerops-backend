@@ -6,3 +6,6 @@ node_modules
 
 # Local interview prep notes
 docs/questions.md
+
+# Local deployment runbooks
+docs/EC2_DEPLOYMENT.md
