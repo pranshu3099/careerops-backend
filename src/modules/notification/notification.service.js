@@ -1,4 +1,7 @@
 import { FollowUpService } from "../followup/followup.service.js";
+import { invalidateUserNotificationCache } from "../../services/dashboardCache.service.js";
+import { CACHE_TTL_SECONDS, cacheKeys } from "../../constants/cacheKeys.js";
+import { getOrSetJson } from "../../services/cache.service.js";
 import {
   countUnreadNotifications,
   createNotification,
@@ -41,7 +44,9 @@ const toNotificationResponse = (notification) => ({
 
 export class NotificationService {
   static async create(data) {
-    return createNotification(data);
+    const notification = await createNotification(data);
+    await invalidateUserNotificationCache(data.userId);
+    return notification;
   }
 
   static async createFollowUpDueNotifications(userId, now = new Date()) {
@@ -49,7 +54,7 @@ export class NotificationService {
 
     const results = await Promise.allSettled(
       dueFollowUps.map((followUp) =>
-        createNotification({
+        this.create({
           userId,
           applicationId: followUp.applicationId,
           followUpId: followUp.followUpId,
@@ -84,7 +89,7 @@ export class NotificationService {
 
     const results = await Promise.allSettled(
       interviews.map((interview) =>
-        createNotification({
+        this.create({
           userId,
           applicationId: interview.applicationId,
           interviewId: interview.id,
@@ -141,7 +146,7 @@ export class NotificationService {
   }
 
   static async createGhostWarning({ application, score }) {
-    return createNotification({
+    return this.create({
       userId: application.userId,
       applicationId: application.id,
       type: "GHOST_STALE_WARNING",
@@ -160,7 +165,7 @@ export class NotificationService {
   }
 
   static async createApplicationGhosted({ application, score }) {
-    return createNotification({
+    return this.create({
       userId: application.userId,
       applicationId: application.id,
       type: "APPLICATION_GHOSTED",
@@ -188,13 +193,18 @@ export class NotificationService {
   }
 
   static async getUnreadCount(userId) {
-    return {
-      unread: await countUnreadNotifications(userId),
-    };
+    return getOrSetJson(
+      cacheKeys.notificationUnreadCount(userId),
+      CACHE_TTL_SECONDS.NOTIFICATION_UNREAD_COUNT,
+      async () => ({
+        unread: await countUnreadNotifications(userId),
+      }),
+    );
   }
 
   static async markRead(id, userId) {
     const result = await markNotificationRead(id, userId);
+    if (result.count > 0) await invalidateUserNotificationCache(userId);
     return {
       success: true,
       updated: result.count,
@@ -203,6 +213,7 @@ export class NotificationService {
 
   static async markAllRead(userId) {
     const result = await markAllNotificationsRead(userId);
+    if (result.count > 0) await invalidateUserNotificationCache(userId);
     return {
       success: true,
       updated: result.count,
@@ -211,6 +222,7 @@ export class NotificationService {
 
   static async delete(id, userId) {
     const result = await deleteNotification(id, userId);
+    if (result.count > 0) await invalidateUserNotificationCache(userId);
     return {
       success: true,
       deleted: result.count,
