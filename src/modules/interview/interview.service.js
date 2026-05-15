@@ -8,6 +8,9 @@ import {
   updateInterviewResult as updateInterviewResultInRepo,
 } from "./interview.repo.js";
 import FollowUpEmailScheduler from "../../scheduler/followupemail.scheduler.js";
+import { invalidateUserDashboardCache } from "../../services/dashboardCache.service.js";
+import { CACHE_TTL_SECONDS, cacheKeys } from "../../constants/cacheKeys.js";
+import { getOrSetJson } from "../../services/cache.service.js";
 
 const toInterviewResponse = (interview) => ({
   id: interview.id,
@@ -87,8 +90,14 @@ const removeQueuedFollowUps = async (followUps) => {
 
 export class InterviewService {
   static async getAllInterviews(userId) {
-    const interviews = await findAllByUser(userId);
-    return interviews.map(toUserInterviewResponse);
+    return getOrSetJson(
+      cacheKeys.interviews(userId),
+      CACHE_TTL_SECONDS.INTERVIEW_LIST,
+      async () => {
+        const interviews = await findAllByUser(userId);
+        return interviews.map(toUserInterviewResponse);
+      },
+    );
   }
 
   static async createInterview(userId, data) {
@@ -124,6 +133,8 @@ export class InterviewService {
         status: "SCHEDULED",
       },
     });
+
+    await invalidateUserDashboardCache(userId);
 
     return {
       success: true,
@@ -165,6 +176,7 @@ export class InterviewService {
     }
 
     const updated = await updateInterviewById(id, updateData);
+    await invalidateUserDashboardCache(userId);
 
     return {
       success: true,
@@ -183,6 +195,7 @@ export class InterviewService {
       status: "CANCELLED",
       result: null,
     });
+    await invalidateUserDashboardCache(userId);
 
     return {
       success: true,
@@ -216,6 +229,8 @@ export class InterviewService {
     if (cancelledFollowUps.length > 0) {
       await removeQueuedFollowUps(cancelledFollowUps);
     }
+
+    await invalidateUserDashboardCache(userId);
 
     return {
       success: true,
