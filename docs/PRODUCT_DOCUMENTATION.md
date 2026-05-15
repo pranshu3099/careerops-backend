@@ -2,7 +2,7 @@
 
 ## Overview
 
-CareerOps is a smart job application tracking platform designed to help job seekers manage the full lifecycle of their applications from one organized system. The product combines application tracking, interview management, automated follow-ups, email reminders, and ghosting insights so users can stay informed, act on time, and maintain professional communication with recruiters and hiring teams.
+CareerOps is a smart job application tracking platform designed to help job seekers manage the full lifecycle of their applications from one organized system. The product combines application tracking, interview management, automated follow-ups, email reminders, in-app notifications, and ghosting insights so users can stay informed, act on time, and maintain professional communication with recruiters and hiring teams.
 
 The backend is built as a modular Express.js API with PostgreSQL persistence through Prisma, Redis-backed background jobs through BullMQ, secure authentication, and automated email workflows.
 
@@ -108,6 +108,28 @@ Configurable settings:
 
 This allows users to surface near-term actions without receiving unnecessary reminders.
 
+### In-App Notifications
+
+CareerOps includes an in-app notification system for important job-search actions that need user attention. Notifications are stored in the database, exposed through authenticated API endpoints, and designed to support the bell icon experience in the frontend.
+
+Current notification cases:
+
+- Follow-up due alerts.
+- Interview reminders.
+- Ghost or stale application warnings.
+- Application marked as ghosted.
+
+Notifications include a type, title, message, optional application, follow-up, and interview references, a read timestamp, and a flexible JSON data payload for UI context. A unique `sourceKey` is used for generated notifications so the system can avoid creating duplicate notifications for the same event.
+
+Follow-up and interview notifications are created by a scheduled notification sync worker. The recurring sync job runs hourly, checks users who have pending follow-ups or scheduled interviews, and creates notifications when those items fall into the relevant alert window. The backend can also enqueue a targeted user sync after important user actions such as changing follow-up alert settings or scheduling interviews.
+
+Ghost-related notifications are created from the ghost detection workflow:
+
+- A stale warning can be created when an application appears inactive but has not yet crossed the ghosting threshold.
+- A ghosted notification is created when the system marks an application as ghosted.
+
+Users can list notifications, fetch unread counts, mark a single notification as read, mark all notifications as read, and delete notifications.
+
 ### Email Automation
 
 CareerOps uses email automation for two important workflows:
@@ -187,7 +209,7 @@ The score is capped between 0 and 1. Applications in terminal or closed stages s
 - Medium confidence applications are checked periodically.
 - Low confidence applications are checked less frequently.
 
-When an application is detected as ghosted, the system updates the application status, stores the ghosted timestamp, updates the ghost detection record, and writes a ghost detection event.
+When an application is detected as ghosted, the system updates the application status, stores the ghosted timestamp, updates the ghost detection record, writes a ghost detection event, and creates an in-app notification for the user.
 
 ### Analytics and Statistics
 
@@ -267,6 +289,16 @@ The backend exposes REST-style endpoints grouped by product domain.
 | GET | `/settings/followup-alerts` | Retrieve follow-up alert settings. |
 | PATCH | `/settings/followup-alerts` | Update follow-up alert settings. |
 
+### Notifications
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/notifications` | List notifications for the authenticated user. Supports unread-only and limit query options. |
+| GET | `/notifications/unread-count` | Return the authenticated user's unread notification count. |
+| PATCH | `/notifications/:id/read` | Mark one notification as read. |
+| PATCH | `/notifications/read-all` | Mark all notifications as read for the authenticated user. |
+| DELETE | `/notifications/:id` | Delete one notification owned by the authenticated user. |
+
 ## Data Model
 
 The product is organized around the following main entities:
@@ -277,6 +309,7 @@ The product is organized around the following main entities:
 - `FollowUp`: Represents scheduled or completed follow-up actions.
 - `Interview`: Represents interview rounds and outcomes.
 - `GhostDetection`: Stores ghosting confidence and check scheduling data.
+- `Notification`: Stores in-app notifications, read state, source keys, and optional application, follow-up, and interview references.
 - `EventLog`: Stores lifecycle events for history and analytics.
 - `AnalyticsSnapshot`: Stores aggregate job search metrics by date.
 - `RefreshToken`: Stores hashed refresh tokens with expiry and revocation state.
@@ -292,12 +325,14 @@ Queues:
 - `email-queue`: Sends email verification messages.
 - `followup-queue`: Sends scheduled follow-up emails.
 - `ghost-detection`: Evaluates stale applications and updates ghost status.
+- `notification-queue`: Syncs in-app notifications for follow-up due alerts and interview reminders.
 
 Workers:
 
 - `email.worker.js`: Processes verification email jobs.
 - `followup.worker.js`: Validates and sends follow-up emails.
 - `ghost.worker.js`: Scores applications, updates ghost detection records, triggers follow-ups when useful, and schedules the next ghost check.
+- `notification.worker.js`: Runs recurring and targeted notification sync jobs for users with pending follow-ups or scheduled interviews.
 
 This architecture keeps request-response API calls fast while allowing email and scoring workflows to run independently.
 
@@ -352,6 +387,7 @@ Important environment variables:
 | `npm run worker:email` | Start the email verification worker. |
 | `npm run worker:followup` | Start the follow-up email worker. |
 | `npm run worker:ghost` | Start the ghost detection worker. |
+| `npm run worker:notification` | Start the in-app notification worker. |
 | `npm test` | Run the Jest test suite. |
 | `npm run test:workers` | Run worker-focused tests. |
 | `npm run test:controllers` | Run controller-focused tests. |
@@ -371,8 +407,8 @@ The current backend provides a strong operational foundation. Future product imp
 - Richer ghosting signals based on recruiter responses.
 - Calendar integration for interviews.
 - Import workflows from LinkedIn, Naukri, CSV, or email.
-- Notification channels beyond email.
+- Additional notification channels beyond in-app notifications and email.
 
 ## Summary
 
-CareerOps is a structured job search operations platform. It helps users manage applications, maintain timely recruiter communication, track interview progress, detect stale opportunities, and understand their overall application pipeline. The backend is designed around clear domain modules, validated APIs, durable persistence, secure authentication, and asynchronous background jobs for email and ghost detection workflows.
+CareerOps is a structured job search operations platform. It helps users manage applications, maintain timely recruiter communication, track interview progress, receive timely notifications, detect stale opportunities, and understand their overall application pipeline. The backend is designed around clear domain modules, validated APIs, durable persistence, secure authentication, and asynchronous background jobs for email, notification, and ghost detection workflows.
