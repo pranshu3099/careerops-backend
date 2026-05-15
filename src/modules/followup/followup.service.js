@@ -6,6 +6,8 @@ import {
   findUpcomingByUser,
 } from "./followup.repo.js";
 import { getOrCreateSettings } from "../settings/settings.repo.js";
+import { CACHE_TTL_SECONDS, cacheKeys } from "../../constants/cacheKeys.js";
+import { getOrSetJson } from "../../services/cache.service.js";
 
 const TERMINAL_APPLICATION_STATUSES = [
   "ACCEPTED",
@@ -161,20 +163,26 @@ export class FollowUpService {
   }
 
   static async getUpcomingFollowUps(userId) {
-    const followUps = await findUpcomingByUser(userId);
-    const nextByApplication = new Map();
+    return getOrSetJson(
+      cacheKeys.upcomingFollowUps(userId),
+      CACHE_TTL_SECONDS.UPCOMING_FOLLOWUPS,
+      async () => {
+        const followUps = await findUpcomingByUser(userId);
+        const nextByApplication = new Map();
 
-    followUps.forEach((followUp) => {
-      if (nextByApplication.has(followUp.applicationId)) return;
-      if (!isUpcomingFollowUpValid(followUp)) return;
+        followUps.forEach((followUp) => {
+          if (nextByApplication.has(followUp.applicationId)) return;
+          if (!isUpcomingFollowUpValid(followUp)) return;
 
-      nextByApplication.set(
-        followUp.applicationId,
-        toUpcomingFollowUpResponse(followUp),
-      );
-    });
+          nextByApplication.set(
+            followUp.applicationId,
+            toUpcomingFollowUpResponse(followUp),
+          );
+        });
 
-    return [...nextByApplication.values()];
+        return [...nextByApplication.values()];
+      },
+    );
   }
 
   static async getDueSoonFollowUps(userId, now = new Date()) {
