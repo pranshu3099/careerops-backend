@@ -10,6 +10,7 @@ import {
 } from "../services/ghostQueue.service.js";
 import { NotificationService } from "../modules/notification/notification.service.js";
 import { followupQueue } from "../queues/followup.queue.js";
+import { invalidateUserDashboardCache } from "../services/dashboardCache.service.js";
 const prisma = new PrismaClient();
 
 export const ghostWorker = new Worker(
@@ -134,6 +135,8 @@ export const ghostWorker = new Worker(
         application: app,
         score,
       });
+
+      await invalidateUserDashboardCache(app.userId);
 
       await removeQueuedGhostChecks(applicationId, { excludeJobId: job.id });
       return;
