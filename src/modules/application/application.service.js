@@ -15,6 +15,9 @@ import {
 } from "../../constants/followup.js";
 import { AUTH_MESSAGES } from "../../constants/messages.js";
 import FollowUpEmailScheduler from "../../scheduler/followupemail.scheduler.js";
+import { CACHE_TTL_SECONDS, cacheKeys } from "../../constants/cacheKeys.js";
+import { getOrSetJson } from "../../services/cache.service.js";
+import { invalidateUserDashboardCache } from "../../services/dashboardCache.service.js";
 const prisma = new PrismaClient();
 const INITIAL_GHOST_CHECK_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -201,6 +204,7 @@ export class ApplicationService {
     });
 
     const nextFollowUp = followUps[0];
+    await invalidateUserDashboardCache(userId);
 
     return {
       applicationId: application.id,
@@ -250,6 +254,8 @@ export class ApplicationService {
         `Failed to enqueue followup ${followUp.id}: ${err.message}`,
       );
     }
+
+    await invalidateUserDashboardCache(application.userId);
 
     return followUp;
   }
@@ -339,29 +345,37 @@ export class ApplicationService {
       updated.latestFollowUp = withFollowUpMessage(followUp);
     }
 
+    await invalidateUserDashboardCache(userId);
+
     return updated;
   }
 
   static async getApplications(userId) {
-    const apps = await findAllByUser(userId);
-    return apps.map((a) => ({
-      id: a.id,
-      company: a.company?.name || null,
-      hrName: a.company.hrName,
-      hrEmail: a.company.hrEmail,
-      role: a.role,
-      location: a.location,
-      source: a.source,
-      appliedAt: a.appliedAt,
-      currentStatus: a.status,
-      lastResponseAt: a.lastResponseAt || null,
-      ghostDetection: a.ghostDetection
-        ? {
-            isGhosted: a.ghostDetection.isGhosted,
-            confidenceScore: a.ghostDetection.confidenceScore,
-          }
-        : null,
-    }));
+    return getOrSetJson(
+      cacheKeys.applications(userId),
+      CACHE_TTL_SECONDS.APPLICATION_LIST,
+      async () => {
+        const apps = await findAllByUser(userId);
+        return apps.map((a) => ({
+          id: a.id,
+          company: a.company?.name || null,
+          hrName: a.company.hrName,
+          hrEmail: a.company.hrEmail,
+          role: a.role,
+          location: a.location,
+          source: a.source,
+          appliedAt: a.appliedAt,
+          currentStatus: a.status,
+          lastResponseAt: a.lastResponseAt || null,
+          ghostDetection: a.ghostDetection
+            ? {
+                isGhosted: a.ghostDetection.isGhosted,
+                confidenceScore: a.ghostDetection.confidenceScore,
+              }
+            : null,
+        }));
+      },
+    );
   }
 
   static async getApplicationById(id, userId) {
@@ -558,6 +572,8 @@ export class ApplicationService {
       }));
     }
 
+    await invalidateUserDashboardCache(userId);
+
     return response;
   }
 
@@ -620,6 +636,8 @@ export class ApplicationService {
       }
     });
 
+    await invalidateUserDashboardCache(userId);
+
     return {
       success: true,
       deleted: true,
@@ -634,6 +652,10 @@ export class ApplicationService {
   }
 
   static async getApplicationStats(userId) {
-    return getStats(userId);
+    return getOrSetJson(
+      cacheKeys.applicationStats(userId),
+      CACHE_TTL_SECONDS.APPLICATION_STATS,
+      () => getStats(userId),
+    );
   }
 }
