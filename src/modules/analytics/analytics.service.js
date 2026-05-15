@@ -2,6 +2,8 @@ import {
   getApplicationsForAnalytics,
   getEventLogsForAnalytics,
 } from "./analytics.repo.js";
+import { CACHE_TTL_SECONDS, cacheKeys } from "../../constants/cacheKeys.js";
+import { getOrSetJson } from "../../services/cache.service.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const STATUS_ORDER = [
@@ -552,67 +554,110 @@ const buildTimeline = (applications, events, bucket) => {
 
 export class AnalyticsService {
   static async getOverview(userId) {
-    const applications = await getApplicationsForAnalytics(userId);
-    const snapshot = buildSnapshot(applications);
+    return getOrSetJson(
+      cacheKeys.analyticsOverview(userId),
+      CACHE_TTL_SECONDS.ANALYTICS,
+      async () => {
+        const applications = await getApplicationsForAnalytics(userId);
+        const snapshot = buildSnapshot(applications);
 
-    return {
-      pipeline: {
-        totalApplications: applications.length,
-        activeApplications: applications.filter(
-          (application) => !TERMINAL_STATUSES.includes(application.status),
-        ).length,
-        interviews: snapshot.interviews.total,
-        offers: applications.filter((application) =>
-          ["OFFERED", "ACCEPTED", "OFFER_DECLINED"].includes(application.status),
-        ).length,
-        accepted: snapshot.applicationsByStatus.ACCEPTED,
-        rejected: snapshot.applicationsByStatus.REJECTED,
-        ghosted: snapshot.applicationsByStatus.GHOSTED,
+        return {
+          pipeline: {
+            totalApplications: applications.length,
+            activeApplications: applications.filter(
+              (application) => !TERMINAL_STATUSES.includes(application.status),
+            ).length,
+            interviews: snapshot.interviews.total,
+            offers: applications.filter((application) =>
+              ["OFFERED", "ACCEPTED", "OFFER_DECLINED"].includes(
+                application.status,
+              ),
+            ).length,
+            accepted: snapshot.applicationsByStatus.ACCEPTED,
+            rejected: snapshot.applicationsByStatus.REJECTED,
+            ghosted: snapshot.applicationsByStatus.GHOSTED,
+          },
+          ...snapshot,
+        };
       },
-      ...snapshot,
-    };
+    );
   }
 
   static async getFunnel(userId) {
-    const applications = await getApplicationsForAnalytics(userId);
-    const events = await getEventLogsForAnalytics(userId);
-    return buildFunnel(applications, events);
+    return getOrSetJson(
+      cacheKeys.analyticsFunnel(userId),
+      CACHE_TTL_SECONDS.ANALYTICS,
+      async () => {
+        const applications = await getApplicationsForAnalytics(userId);
+        const events = await getEventLogsForAnalytics(userId);
+        return buildFunnel(applications, events);
+      },
+    );
   }
 
   static async getTimeline(userId, { range = "90d", bucket = "week" } = {}) {
-    const from = getRangeStart(range);
-    const applications = (await getApplicationsForAnalytics(userId)).filter(
-      (application) => application.appliedAt >= from,
-    );
-    const events = await getEventLogsForAnalytics(userId, from);
+    const normalizedBucket = bucket === "month" ? "month" : "week";
 
-    return {
-      range,
-      bucket: bucket === "month" ? "month" : "week",
-      from,
-      data: buildTimeline(applications, events, bucket === "month" ? "month" : "week"),
-    };
+    return getOrSetJson(
+      cacheKeys.analyticsTimeline(userId, {
+        range,
+        bucket: normalizedBucket,
+      }),
+      CACHE_TTL_SECONDS.ANALYTICS,
+      async () => {
+        const from = getRangeStart(range);
+        const applications = (await getApplicationsForAnalytics(userId)).filter(
+          (application) => application.appliedAt >= from,
+        );
+        const events = await getEventLogsForAnalytics(userId, from);
+
+        return {
+          range,
+          bucket: normalizedBucket,
+          from,
+          data: buildTimeline(applications, events, normalizedBucket),
+        };
+      },
+    );
   }
 
   static async getSources(userId) {
-    const applications = await getApplicationsForAnalytics(userId);
-    return buildSourcePerformance(applications);
+    return getOrSetJson(
+      cacheKeys.analyticsSources(userId),
+      CACHE_TTL_SECONDS.ANALYTICS,
+      async () => {
+        const applications = await getApplicationsForAnalytics(userId);
+        return buildSourcePerformance(applications);
+      },
+    );
   }
 
   static async getInterviews(userId) {
-    const applications = await getApplicationsForAnalytics(userId);
-    const snapshot = buildSnapshot(applications);
-    const performance = buildInterviewPerformance(applications);
+    return getOrSetJson(
+      cacheKeys.analyticsInterviews(userId),
+      CACHE_TTL_SECONDS.ANALYTICS,
+      async () => {
+        const applications = await getApplicationsForAnalytics(userId);
+        const snapshot = buildSnapshot(applications);
+        const performance = buildInterviewPerformance(applications);
 
-    return {
-      ...snapshot.interviews,
-      performance,
-    };
+        return {
+          ...snapshot.interviews,
+          performance,
+        };
+      },
+    );
   }
 
   static async getTimeMetrics(userId) {
-    const applications = await getApplicationsForAnalytics(userId);
-    const events = await getEventLogsForAnalytics(userId);
-    return buildTimeMetrics(applications, events);
+    return getOrSetJson(
+      cacheKeys.analyticsTimeMetrics(userId),
+      CACHE_TTL_SECONDS.ANALYTICS,
+      async () => {
+        const applications = await getApplicationsForAnalytics(userId);
+        const events = await getEventLogsForAnalytics(userId);
+        return buildTimeMetrics(applications, events);
+      },
+    );
   }
 }
