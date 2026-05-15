@@ -85,3 +85,35 @@ export const csrfProtection = (req, res, next) => {
 
   return next();
 };
+
+
+
+// timingSafeEqual compares two tokens in a safer way.
+
+// Normally, string comparison may stop as soon as it finds a difference.
+
+// Example:
+
+// "abcdef" === "xbcdef"
+// This fails immediately at the first character.
+
+// But:
+
+// "abcdef" === "abcdeg"
+// This compares almost the whole string before failing.
+
+// That tiny time difference can theoretically help an attacker guess a secret token character by character.
+
+// crypto.timingSafeEqual(a, b) avoids that by comparing both values in a way that takes a consistent amount of time, so attackers cannot learn useful information from timing differences.
+
+// In our CSRF code:
+
+// timingSafeEqual(cookieToken, headerToken)
+// means:
+
+// Compare the CSRF token from the cookie with the CSRF token from the request header without leaking timing clues.
+
+// We also check length first:
+
+// if (aBuffer.length !== bBuffer.length) return false;
+// because crypto.timingSafeEqual throws an error if the two buffers are different lengths.
