@@ -4,6 +4,7 @@ import { Worker } from "bullmq";
 import redisConnection from "../config/redis.js";
 import { sendFollowUpEmail } from "../utils/followupmailer.js";
 import { FOLLOWUPTYPE } from "../constants/followup.js";
+import { invalidateUserDashboardCache } from "../services/dashboardCache.service.js";
 const prisma = new PrismaClient();
 const TERMINAL_APPLICATION_STATUSES = [
   "ACCEPTED",
@@ -72,8 +73,10 @@ export const followupWorker = new Worker(
       return;
     }
 
+    let followUp;
+
     try {
-      const followUp = await prisma.followUp.findUnique({
+      followUp = await prisma.followUp.findUnique({
         where: { id: followUpId },
         include: {
           application: {
@@ -109,6 +112,7 @@ export const followupWorker = new Worker(
           where: { id: followUpId },
           data: { status: "CANCELLED" },
         });
+        await invalidateUserDashboardCache(followUp.application.userId);
         return;
       }
 
@@ -131,6 +135,7 @@ export const followupWorker = new Worker(
           where: { id: followUpId },
           data: { status: "CANCELLED" },
         });
+        await invalidateUserDashboardCache(followUp.application.userId);
         return;
       }
 
@@ -161,6 +166,7 @@ export const followupWorker = new Worker(
       console.log(
         `FollowUp ${updatedFollowUp.id} marked as ${updatedFollowUp.status}`,
       );
+      await invalidateUserDashboardCache(followUp.application.userId);
     } catch (err) {
       await prisma.followUp.updateMany({
         where: { id: followUpId },
@@ -169,6 +175,7 @@ export const followupWorker = new Worker(
           executedAt: new Date(),
         },
       });
+      await invalidateUserDashboardCache(followUp?.application?.userId);
 
       throw err; // so BullMQ can retry
     }
