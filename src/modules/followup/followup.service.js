@@ -186,14 +186,20 @@ export class FollowUpService {
   }
 
   static async getDueSoonFollowUps(userId, now = new Date()) {
-    const settings = await getOrCreateSettings(userId);
-    if (!settings.followUpAlertsEnabled) return [];
+    return getOrSetJson(
+      cacheKeys.dueSoonFollowUps(userId),
+      CACHE_TTL_SECONDS.DUE_SOON_FOLLOWUPS,
+      async () => {
+        const settings = await getOrCreateSettings(userId);
+        if (!settings.followUpAlertsEnabled) return [];
 
-    const windowEnd = getAlertWindowEnd(now, settings.followUpAlertDays);
-    const followUps = await findDueSoonByUser(userId, now, windowEnd);
+        const windowEnd = getAlertWindowEnd(now, settings.followUpAlertDays);
+        const followUps = await findDueSoonByUser(userId, now, windowEnd);
 
-    return followUps
-      .filter(isUpcomingFollowUpValid)
-      .map(toDueSoonFollowUpResponse);
+        return followUps
+          .filter(isUpcomingFollowUpValid)
+          .map(toDueSoonFollowUpResponse);
+      },
+    );
   }
 }
