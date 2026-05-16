@@ -1,6 +1,7 @@
 import { HTTP_STATUS } from "../../constants/httpStatus.js";
 import { COMMON_MESSAGES } from "../../constants/messages.js";
 import NotificationScheduler from "../../scheduler/notification.scheduler.js";
+import { invalidateUserDashboardCache } from "../../services/dashboardCache.service.js";
 import { SettingsService } from "./settings.service.js";
 
 const getAuthUserId = (req) => req?.user?.userId || req?.user?.id;
@@ -26,6 +27,7 @@ export class SettingsController {
         userId,
         req.body,
       );
+      await invalidateUserDashboardCache(userId);
       await NotificationScheduler.scheduleUserSyncJob(userId);
 
       return res.status(HTTP_STATUS.OK).json(data);
