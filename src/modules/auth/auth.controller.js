@@ -198,41 +198,53 @@ export class AuthController {
         revoked: false,
         expiresAt: { gt: new Date() },
       },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
+      },
     });
-    if (!storedToken) {
+    if (!storedToken || !storedToken.user) {
       return res
         .status(HTTP_STATUS.UNAUTHORIZED)
         .json({ message: AUTH_MESSAGES.TOKEN_REUSE_DETECTED });
     }
-    // rotation for refresh token
-
-    await prisma.refreshToken.update({
-      where: { id: storedToken.id },
-      data: { revoked: true },
-    });
 
     const newRefreshToken = generateRefreshToken();
     const hashedNewToken = hashToken(newRefreshToken);
 
-    await prisma.refreshToken.create({
-      data: {
-        token: hashedNewToken,
-        userId: storedToken.userId,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
+    const rotation = await prisma.$transaction(async (tx) => {
+      const revoked = await tx.refreshToken.updateMany({
+        where: {
+          id: storedToken.id,
+          revoked: false,
+        },
+        data: { revoked: true },
+      });
+
+      if (revoked.count !== 1) return false;
+
+      await tx.refreshToken.create({
+        data: {
+          token: hashedNewToken,
+          userId: storedToken.userId,
+          expiresAt: new Date(Date.now() + REFRESH_TOKEN_MAX_AGE_MS),
+        },
+      });
+
+      return true;
     });
 
-    const user = await prisma.user.findUnique({
-      where: { id: storedToken.userId },
-    });
-
-    if (!user) {
+    if (!rotation) {
       return res
         .status(HTTP_STATUS.UNAUTHORIZED)
-        .json({ message: AUTH_MESSAGES.UNAUTHORIZED_REQUEST });
+        .json({ message: AUTH_MESSAGES.TOKEN_REUSE_DETECTED });
     }
 
-    const accessToken = AuthService.generateAuthToken(user);
+    const accessToken = AuthService.generateAuthToken(storedToken.user);
     res.cookie("refreshToken", newRefreshToken, {
       ...authCookieOptions,
       maxAge: REFRESH_TOKEN_MAX_AGE_MS,
@@ -266,16 +278,15 @@ export class AuthController {
 
   static async me(req, res) {
     try {
-      const refreshToken = req.cookies?.refreshToken;
-
-      const user = await AuthService.getCurrentUser(refreshToken);
+      const userId = req.user?.userId || req.user?.id;
+      const user = await AuthService.getUserById(userId);
 
       return res.status(HTTP_STATUS.OK).json({
         success: true,
         data: {
           id: user.id,
           email: user.email,
-          name:user.name,
+          name: user.name,
           isUserVerified: user.isUserVerified,
         },
       });
