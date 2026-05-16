@@ -100,6 +100,28 @@ export class AuthService {
     }
   }
 
+  static async getUserById(userId) {
+    if (!userId) {
+      throw new Error(AUTH_MESSAGES.UNAUTHORIZED);
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        isUserVerified: true,
+      },
+    });
+
+    if (!user) {
+      throw new Error(AUTH_MESSAGES.UNAUTHORIZED);
+    }
+
+    return user;
+  }
+
   // static async sendEmail(user) {
   //   try {
   //     if (!user?.id || !user?.email) {
