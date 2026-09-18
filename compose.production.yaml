@@ -20,7 +20,7 @@ services:
   api:
     <<: *careerops-service
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:6001:3000"
     healthcheck:
       test:
         - CMD
