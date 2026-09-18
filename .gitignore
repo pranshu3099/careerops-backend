@@ -9,3 +9,6 @@ docs/questions.md
 
 # Local deployment runbooks
 docs/EC2_DEPLOYMENT.md
+
+# Local scaling notes
+docs/BACKEND_SCALING.md

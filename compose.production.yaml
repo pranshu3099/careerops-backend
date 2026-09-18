@@ -19,8 +19,6 @@ x-careerops-service: &careerops-service
 services:
   api:
     <<: *careerops-service
-    ports:
-      - "127.0.0.1:6001:3000"
     healthcheck:
       test:
         - CMD
@@ -31,6 +29,23 @@ services:
       timeout: 5s
       start_period: 15s
       retries: 3
+
+  nginx:
+    image: nginx:1.28-alpine
+    ports:
+      - "127.0.0.1:6001:8080"
+    volumes:
+      - ./nginx/careerops.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/nginx-health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+    restart: unless-stopped
 
   email-worker:
     <<: *careerops-service
