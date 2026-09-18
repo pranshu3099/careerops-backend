@@ -1,0 +1,64 @@
+x-careerops-service: &careerops-service
+  image: careerops-backend:local
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file:
+    - .env
+  environment:
+    NODE_ENV: production
+    PORT: 3000
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
+  depends_on:
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+  init: true
+
+services:
+  api:
+    <<: *careerops-service
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/auth/failed').then((response) => process.exit(response.status < 500 ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  email-worker:
+    <<: *careerops-service
+    command: ["npm", "run", "worker:email"]
+
+  followup-worker:
+    <<: *careerops-service
+    command: ["npm", "run", "worker:followup"]
+
+  ghost-worker:
+    <<: *careerops-service
+    command: ["npm", "run", "worker:ghost"]
+
+  notification-worker:
+    <<: *careerops-service
+    command: ["npm", "run", "worker:notification"]
+
+  redis:
+    image: redis:7.4-bookworm
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  redis-data:
